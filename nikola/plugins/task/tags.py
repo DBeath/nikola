@@ -36,6 +36,7 @@ except ImportError:
 from nikola.plugin_categories import Task
 from nikola import utils
 
+from rss import generic_rss_renderer
 
 class RenderTags(Task):
     """Render the tag/category pages and feeds."""

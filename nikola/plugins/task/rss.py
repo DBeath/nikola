@@ -34,6 +34,8 @@ except ImportError:
 from nikola import utils
 from nikola.plugin_categories import Task
 
+import PyRSS2Gen as rss
+
 
 class RenderRSS(Task):
     """Generate RSS feeds."""
@@ -73,7 +75,7 @@ class RenderRSS(Task):
                 'name': os.path.normpath(output_name),
                 'file_dep': deps,
                 'targets': [output_name],
-                'actions': [(utils.generic_rss_renderer,
+                'actions': [(generic_rss_renderer,
                             (lang, kw["blog_title"], kw["site_url"],
                              kw["blog_description"], posts, output_name,
                              kw["rss_teasers"], kw['feed_length'], feed_url))],
@@ -81,3 +83,51 @@ class RenderRSS(Task):
                 'clean': True,
                 'uptodate': [utils.config_changed(kw)],
             }
+
+def generic_rss_renderer(lang, title, link, description, timeline, output_path,
+                     rss_teasers, feed_length=10, feed_url=None):
+"""Takes all necessary data, and renders a RSS feed in output_path."""
+items = []
+for post in timeline[:feed_length]:
+    args = {
+        'title': post.title(lang),
+        'link': post.permalink(lang, absolute=True),
+        'description': post.text(lang, teaser_only=rss_teasers, really_absolute=True),
+        'guid': post.permalink(lang, absolute=True),
+        # PyRSS2Gen's pubDate is GMT time.
+        'pubDate': (post.date if post.date.tzinfo is None else
+                    post.date.astimezone(pytz.timezone('UTC'))),
+        'categories': post._tags.get(lang, []),
+    }
+    if post.meta('author') is not None:
+        args['author'] = post.meta('author')
+    items.append(rss.RSSItem(**args))
+rss_obj = ExtendedRSS2(
+    title=title,
+    link=link,
+    description=description,
+    lastBuildDate=datetime.datetime.now(),
+    items=items,
+    generator='nikola',
+    language=lang
+)
+rss_obj.self_url = feed_url
+rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
+dst_dir = os.path.dirname(output_path)
+makedirs(dst_dir)
+with codecs.open(output_path, "wb+", "utf-8") as rss_file:
+    data = rss_obj.to_xml(encoding='utf-8')
+    if isinstance(data, bytes_str):
+        data = data.decode('utf-8')
+    rss_file.write(data)
+
+
+class ExtendedRSS2(rss.RSS2):
+    def publish_extensions(self, handler):
+        if self.self_url:
+            handler.startElement("atom:link", {
+                'href': self.self_url,
+                'rel': "self",
+                'type': "application/rss+xml"
+            })
+            handler.endElement("atom:link")
