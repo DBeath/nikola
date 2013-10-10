@@ -32,10 +32,32 @@ except ImportError:
     from urllib.parse import urljoin  # NOQA
 
 from nikola import utils
+from nikola.utils import makedirs
 from nikola.plugin_categories import Task
 
 import PyRSS2Gen as rss
 
+import pytz
+import datetime
+import codecs
+import sys
+
+try:
+    from imp import reload
+except ImportError:
+    pass
+
+if sys.version_info[0] == 3:
+    # Python 3
+    bytes_str = bytes
+    unicode_str = str
+    unichr = chr
+    from imp import reload as _reload
+else:
+    bytes_str = str
+    unicode_str = unicode  # NOQA
+    _reload = reload  # NOQA
+    unichr = unichr
 
 class RenderRSS(Task):
     """Generate RSS feeds."""
@@ -86,40 +108,40 @@ class RenderRSS(Task):
 
 def generic_rss_renderer(lang, title, link, description, timeline, output_path,
                      rss_teasers, feed_length=10, feed_url=None):
-"""Takes all necessary data, and renders a RSS feed in output_path."""
-items = []
-for post in timeline[:feed_length]:
-    args = {
-        'title': post.title(lang),
-        'link': post.permalink(lang, absolute=True),
-        'description': post.text(lang, teaser_only=rss_teasers, really_absolute=True),
-        'guid': post.permalink(lang, absolute=True),
-        # PyRSS2Gen's pubDate is GMT time.
-        'pubDate': (post.date if post.date.tzinfo is None else
-                    post.date.astimezone(pytz.timezone('UTC'))),
-        'categories': post._tags.get(lang, []),
-    }
-    if post.meta('author') is not None:
-        args['author'] = post.meta('author')
-    items.append(rss.RSSItem(**args))
-rss_obj = ExtendedRSS2(
-    title=title,
-    link=link,
-    description=description,
-    lastBuildDate=datetime.datetime.now(),
-    items=items,
-    generator='nikola',
-    language=lang
-)
-rss_obj.self_url = feed_url
-rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
-dst_dir = os.path.dirname(output_path)
-makedirs(dst_dir)
-with codecs.open(output_path, "wb+", "utf-8") as rss_file:
-    data = rss_obj.to_xml(encoding='utf-8')
-    if isinstance(data, bytes_str):
-        data = data.decode('utf-8')
-    rss_file.write(data)
+    """Takes all necessary data, and renders a RSS feed in output_path."""
+    items = []
+    for post in timeline[:feed_length]:
+        args = {
+            'title': post.title(lang),
+            'link': post.permalink(lang, absolute=True),
+            'description': post.text(lang, teaser_only=rss_teasers, really_absolute=True),
+            'guid': post.permalink(lang, absolute=True),
+            # PyRSS2Gen's pubDate is GMT time.
+            'pubDate': (post.date if post.date.tzinfo is None else
+                        post.date.astimezone(pytz.timezone('UTC'))),
+            'categories': post._tags.get(lang, []),
+        }
+        if post.meta('author') is not None:
+            args['author'] = post.meta('author')
+        items.append(rss.RSSItem(**args))
+    rss_obj = ExtendedRSS2(
+        title=title,
+        link=link,
+        description=description,
+        lastBuildDate=datetime.datetime.now(),
+        items=items,
+        generator='nikola',
+        language=lang
+    )
+    rss_obj.self_url = feed_url
+    rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
+    dst_dir = os.path.dirname(output_path)
+    makedirs(dst_dir)
+    with codecs.open(output_path, "wb+", "utf-8") as rss_file:
+        data = rss_obj.to_xml(encoding='utf-8')
+        if isinstance(data, bytes_str):
+            data = data.decode('utf-8')
+        rss_file.write(data)
 
 
 class ExtendedRSS2(rss.RSS2):

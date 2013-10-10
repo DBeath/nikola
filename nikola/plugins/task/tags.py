@@ -36,7 +36,7 @@ except ImportError:
 from nikola.plugin_categories import Task
 from nikola import utils
 
-from rss import generic_rss_renderer
+from nikola.plugins.task.rss import generic_rss_renderer
 
 class RenderTags(Task):
     """Render the tag/category pages and feeds."""
@@ -274,7 +274,7 @@ class RenderTags(Task):
             'name': output_name,
             'file_dep': deps,
             'targets': [output_name],
-            'actions': [(utils.generic_rss_renderer,
+            'actions': [(generic_rss_renderer,
                         (lang, "{0} ({1})".format(kw["blog_title"], tag),
                          kw["site_url"], kw["blog_description"], post_list,
                          output_name, kw["rss_teasers"], kw['feed_length'], feed_url))],
