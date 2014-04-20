@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,7 +26,6 @@
 
 from __future__ import print_function
 import os
-import sys
 import codecs
 import json
 import shutil
@@ -88,8 +87,8 @@ class CommandInstallTheme(Command):
             'long': 'url',
             'type': str,
             'help': "URL for the theme repository (default: "
-                    "http://themes.getnikola.com/v6/themes.json)",
-            'default': 'http://themes.getnikola.com/v6/themes.json'
+                    "http://themes.getnikola.com/v7/themes.json)",
+            'default': 'http://themes.getnikola.com/v7/themes.json'
         },
     ]
 
@@ -117,26 +116,30 @@ class CommandInstallTheme(Command):
                 print(theme)
             return True
         else:
-            self.do_install(name, data)
-        # See if the theme's parent is available. If not, install it
-        while True:
-            parent_name = utils.get_parent_theme_name(name)
-            if parent_name is None:
-                break
-            try:
-                utils.get_theme_path(parent_name)
-                break
-            except:  # Not available
-                self.do_install(parent_name, data)
-                name = parent_name
+            # `name` may be modified by the while loop.
+            origname = name
+            installstatus = self.do_install(name, data)
+            # See if the theme's parent is available. If not, install it
+            while True:
+                parent_name = utils.get_parent_theme_name(name)
+                if parent_name is None:
+                    break
+                try:
+                    utils.get_theme_path(parent_name)
+                    break
+                except:  # Not available
+                    self.do_install(parent_name, data)
+                    name = parent_name
+            if installstatus:
+                LOGGER.notice('Remember to set THEME="{0}" in conf.py to use this theme.'.format(origname))
 
     def do_install(self, name, data):
         if name in data:
             utils.makedirs(self.output_dir)
-            LOGGER.notice('Downloading: ' + data[name])
+            LOGGER.info('Downloading: ' + data[name])
             zip_file = BytesIO()
             zip_file.write(requests.get(data[name]).content)
-            LOGGER.notice('Extracting: {0} into themes'.format(name))
+            LOGGER.info('Extracting: {0} into themes'.format(name))
             utils.extract_all(zip_file)
             dest_path = os.path.join('themes', name)
         else:
@@ -152,18 +155,17 @@ class CommandInstallTheme(Command):
                 LOGGER.error("{0} is already installed".format(name))
                 return False
 
-            LOGGER.notice('Copying {0} into themes'.format(theme_path))
+            LOGGER.info('Copying {0} into themes'.format(theme_path))
             shutil.copytree(theme_path, dest_path)
         confpypath = os.path.join(dest_path, 'conf.py.sample')
         if os.path.exists(confpypath):
-            LOGGER.notice('This plugin has a sample config file.  Integrate it with yours in order to make this theme work!')
+            LOGGER.notice('This theme has a sample config file.  Integrate it with yours in order to make this theme work!')
             print('Contents of the conf.py.sample file:\n')
             with codecs.open(confpypath, 'rb', 'utf-8') as fh:
-                if sys.platform == 'win32':
+                if self.site.colorful:
                     print(indent(pygments.highlight(
                         fh.read(), PythonLexer(), TerminalFormatter()),
                         4 * ' '))
                 else:
                     print(indent(fh.read(), 4 * ' '))
-        LOGGER.notice('Remember to set THEME="{0}" in conf.py to use this theme.'.format(name))
         return True

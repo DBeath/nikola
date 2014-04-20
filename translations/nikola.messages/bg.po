@@ -4,6 +4,7 @@
 # 
 # Translators:
 # Translators:
+# Translators:
 # ivoarch <ivkuzev@gmail.com>, 2013
 # ivoarch <ivkuzev@gmail.com>, 2013
 msgid ""
@@ -11,7 +12,7 @@ msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:11+0000\n"
+"PO-Revision-Date: 2014-04-17 14:46+0000\n"
 "Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
 "Language-Team: Bulgarian (http://www.transifex.com/projects/p/nikola/language/bg/)\n"
 "MIME-Version: 1.0\n"
@@ -35,6 +36,9 @@ msgstr "Категории"
 msgid "Tags and Categories"
 msgstr "Тагове и Категории"
 
+msgid "Comments"
+msgstr ""
+
 msgid "Read more"
 msgstr "Прочети още"
 
@@ -44,8 +48,11 @@ msgstr "Публикации относно %s"
 msgid "Next post"
 msgstr "Следваща публикация"
 
-msgid "old posts page %d"
-msgstr "стари публикации страница %d"
+msgid "old posts, page %d"
+msgstr "стари публикации, страница %d"
+
+msgid "page %d"
+msgstr "страница %d"
 
 msgid "Source"
 msgstr "Source"
@@ -67,6 +74,9 @@ msgstr "Предишна публикация"
 msgid "Also available in:"
 msgstr "Също достъпно в:"
 
+msgid "Languages:"
+msgstr ""
+
 msgid "Original site"
 msgstr "Оригиналния сайт"
 
@@ -76,8 +86,23 @@ msgstr "Стари публикации"
 msgid "Archive"
 msgstr "Архив"
 
+msgid "Publication date"
+msgstr ""
+
 msgid "Posted:"
 msgstr "Публиковано:"
 
 msgid "Posts for {month} {year}"
 msgstr "Публикации за {month} {year}"
+
+msgid "Nothing found."
+msgstr ""
+
+msgid "No posts found."
+msgstr ""
+
+msgid "RSS feed"
+msgstr ""
+
+msgid "%d min remaining to read"
+msgstr ""

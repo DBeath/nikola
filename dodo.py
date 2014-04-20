@@ -12,21 +12,17 @@ DOIT_CONFIG = {
 
 def recursive_glob(path, pattern):
     """recursively walk path directories and return files matching the pattern"""
-    for root, dirnames, filenames in os.walk(path):
+    for root, dirnames, filenames in os.walk(path, followlinks=True):
         for filename in fnmatch.filter(filenames, pattern):
             yield os.path.join(root, filename)
 
 
 def task_flake8():
     """flake8 - static check for python files"""
-    for fname in recursive_glob('.', '*.py'):
-        if fname.startswith('./cache'):
-            continue
-        yield {
-            'name': fname,
-            'actions': ['flake8 --ignore=E501 {0}'.format(fname)],
-            'file_dep': [fname],
-        }
+    yield {
+        'name': os.path.join(os.getcwd(), 'nikola'),
+        'actions': ['flake8 --ignore=E501 nikola/'],
+    }
 
 
 def task_locale():
@@ -60,19 +56,27 @@ def task_locale():
     return {'actions': [set_nikola_test_locales], 'verbosity': 2}
 
 
-def task_test():
-    """run unit-tests using nose"""
+def task_doctest():
+    """run doctests with py.test"""
     return {
-        'task_dep': ['locale'],
-        'actions': ['nosetests'],
+        'actions': ['py.test --doctest-modules nikola/'],
+        'verbosity': 2,
+    }
+
+
+def task_test():
+    """run unit-tests using py.test"""
+    return {
+        'task_dep': ['locale', 'doctest'],
+        'actions': ['py.test tests/'],
     }
 
 
 def task_coverage():
-    """run unit-tests using nose"""
+    """run unit-tests using py.test, with coverage reporting"""
     return {
-        'task_dep': ['locale'],
-        'actions': ['nosetests --with-coverage --cover-package=nikola --with-doctest --doctest-options=+NORMALIZE_WHITESPACE --logging-filter=-yapsy'],
+        'task_dep': ['locale', 'doctest'],
+        'actions': ['py.test --cov nikola --cov-report term-missing tests/'],
         'verbosity': 2,
     }
 

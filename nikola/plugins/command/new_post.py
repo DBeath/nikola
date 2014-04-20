@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -27,15 +27,19 @@
 from __future__ import unicode_literals, print_function
 import codecs
 import datetime
+import locale
 import os
 import sys
 
 from blinker import signal
+import dateutil.tz
 
 from nikola.plugin_categories import Command
 from nikola import utils
 
-LOGGER = utils.get_logger('new_post', utils.STDERR_HANDLER)
+POSTLOGGER = utils.get_logger('new_post', utils.STDERR_HANDLER)
+PAGELOGGER = utils.get_logger('new_page', utils.STDERR_HANDLER)
+LOGGER = POSTLOGGER
 
 
 def filter_post_pages(compiler, is_post, compilers, post_pages):
@@ -57,8 +61,8 @@ def filter_post_pages(compiler, is_post, compilers, post_pages):
         type_name = "post" if is_post else "page"
         raise Exception("Can't find a way, using your configuration, to create "
                         "a {0} in format {1}. You may want to tweak "
-                        "COMPILERS or POSTS/PAGES in conf.py".format(
-                            type_name, compiler))
+                        "COMPILERS or {2}S in conf.py".format(
+                            type_name, compiler, type_name.upper()))
     return filtered[0]
 
 
@@ -80,7 +84,7 @@ def get_default_compiler(is_post, compilers, post_pages):
     return 'rest'
 
 
-def get_date(schedule=False, rule=None, last_date=None, force_today=False):
+def get_date(schedule=False, rule=None, last_date=None, force_today=False, tz=None, iso8601=False):
     """Returns a date stamp, given a recurrence rule.
 
     schedule - bool:
@@ -95,20 +99,26 @@ def get_date(schedule=False, rule=None, last_date=None, force_today=False):
     force_today - bool:
         tries to schedule a post to today, if possible, even if the scheduled
         time has already passed in the day.
+
+    tz - tzinfo:
+        the timezone used for getting the current time.
+
+    iso8601 - bool:
+        whether to force ISO 8601 dates (instead of locale-specific ones)
+
     """
 
-    date = now = datetime.datetime.now()
+    if tz is None:
+        tz = dateutil.tz.tzlocal()
+    date = now = datetime.datetime.now(tz)
     if schedule:
         try:
             from dateutil import rrule
         except ImportError:
             LOGGER.error('To use the --schedule switch of new_post, '
                          'you have to install the "dateutil" package.')
-            rrule = None
+            rrule = None  # NOQA
     if schedule and rrule and rule:
-        if last_date and last_date.tzinfo:
-            # strip tzinfo for comparisons
-            last_date = last_date.replace(tzinfo=None)
         try:
             rule_ = rrule.rrulestr(rule, dtstart=last_date)
         except Exception:
@@ -118,7 +128,23 @@ def get_date(schedule=False, rule=None, last_date=None, force_today=False):
             if force_today:
                 now = now.replace(hour=0, minute=0, second=0, microsecond=0)
             date = rule_.after(max(now, last_date or now), last_date is None)
-    return date.strftime('%Y/%m/%d %H:%M:%S')
+
+    offset = tz.utcoffset(now)
+    offset_sec = (offset.days * 24 * 3600 + offset.seconds)
+    offset_hrs = offset_sec // 3600
+    offset_min = offset_sec % 3600
+    if iso8601:
+        tz_str = '{0:+03d}:{1:02d}'.format(offset_hrs, offset_min // 60)
+        return date.strftime('%Y-%m-%dT%T') + tz_str
+    else:
+        if offset:
+            tz_str = ' UTC{0:+03d}:{1:02d}'.format(offset_hrs, offset_min // 60)
+        else:
+            tz_str = ' UTC'
+        return date.strftime('{0} {1}'.format(
+            locale.nl_langinfo(locale.D_FMT),
+            locale.nl_langinfo(locale.T_FMT),
+        )) + tz_str
 
 
 class CommandNewPost(Command):
@@ -134,7 +160,7 @@ class CommandNewPost(Command):
             'long': 'page',
             'type': bool,
             'default': False,
-            'help': 'Create a page instead of a blog post.'
+            'help': 'Create a page instead of a blog post. (see also: `nikola new_page`)'
         },
         {
             'name': 'title',
@@ -142,36 +168,36 @@ class CommandNewPost(Command):
             'long': 'title',
             'type': str,
             'default': '',
-            'help': 'Title for the page/post.'
+            'help': 'Title for the post.'
         },
         {
             'name': 'tags',
             'long': 'tags',
             'type': str,
             'default': '',
-            'help': 'Comma-separated tags for the page/post.'
+            'help': 'Comma-separated tags for the post.'
         },
         {
             'name': 'onefile',
             'short': '1',
             'type': bool,
             'default': False,
-            'help': 'Create post with embedded metadata (single file format)'
+            'help': 'Create the post with embedded metadata (single file format)'
         },
         {
             'name': 'twofile',
             'short': '2',
             'type': bool,
             'default': False,
-            'help': 'Create post with separate metadata (two file format)'
+            'help': 'Create the post with separate metadata (two file format)'
         },
         {
-            'name': 'post_format',
+            'name': 'content_format',
             'short': 'f',
             'long': 'format',
             'type': str,
             'default': '',
-            'help': 'Markup format for post, one of rest, markdown, wiki, '
+            'help': 'Markup format for the post, one of rest, markdown, wiki, '
                     'bbcode, html, textile, txt2tags',
         },
         {
@@ -179,13 +205,14 @@ class CommandNewPost(Command):
             'short': 's',
             'type': bool,
             'default': False,
-            'help': 'Schedule post based on recurrence rule'
+            'help': 'Schedule the post based on recurrence rule'
         },
 
     ]
 
     def _execute(self, options, args):
         """Create a new post or page."""
+        global LOGGER
         compiler_names = [p.name for p in
                           self.site.plugin_manager.getPluginsOfCategory(
                               "PageCompiler")]
@@ -198,64 +225,84 @@ class CommandNewPost(Command):
         else:
             path = None
 
+        # Even though stuff was split into `new_page`, it’s easier to do it
+        # here not to duplicate the code.
         is_page = options.get('is_page', False)
         is_post = not is_page
+        content_type = 'page' if is_page else 'post'
         title = options['title'] or None
         tags = options['tags']
         onefile = options['onefile']
         twofile = options['twofile']
+
+        if is_page:
+            LOGGER = PAGELOGGER
+        else:
+            LOGGER = POSTLOGGER
 
         if twofile:
             onefile = False
         if not onefile and not twofile:
             onefile = self.site.config.get('ONE_FILE_POSTS', True)
 
-        post_format = options['post_format']
+        content_format = options['content_format']
 
-        if not post_format:  # Issue #400
-            post_format = get_default_compiler(
+        if not content_format:  # Issue #400
+            content_format = get_default_compiler(
                 is_post,
                 self.site.config['COMPILERS'],
                 self.site.config['post_pages'])
 
-        if post_format not in compiler_names:
-            LOGGER.error("Unknown post format " + post_format)
+        if content_format not in compiler_names:
+            LOGGER.error("Unknown {0} format {1}".format(content_type, content_format))
             return
         compiler_plugin = self.site.plugin_manager.getPluginByName(
-            post_format, "PageCompiler").plugin_object
+            content_format, "PageCompiler").plugin_object
 
         # Guess where we should put this
-        entry = filter_post_pages(post_format, is_post,
+        entry = filter_post_pages(content_format, is_post,
                                   self.site.config['COMPILERS'],
                                   self.site.config['post_pages'])
 
-        print("Creating New Post")
+        print("Creating New {0}".format(content_type.title()))
         print("-----------------\n")
         if title is None:
-            print("Enter title: ", end='')
-            # WHY, PYTHON3???? WHY?
-            sys.stdout.flush()
-            title = sys.stdin.readline()
+            inpf = raw_input if sys.version_info[0] == 2 else input
+            title = inpf("Enter title: ").strip()
         else:
             print("Title:", title)
         if isinstance(title, utils.bytes_str):
-            title = title.decode(sys.stdin.encoding)
+            try:
+                title = title.decode(sys.stdin.encoding)
+            except AttributeError:  # for tests
+                title = title.decode('utf-8')
         title = title.strip()
         if not path:
             slug = utils.slugify(title)
         else:
             if isinstance(path, utils.bytes_str):
-                path = path.decode(sys.stdin.encoding)
+                try:
+                    path = path.decode(sys.stdin.encoding)
+                except AttributeError:  # for tests
+                    path = path.decode('utf-8')
             slug = utils.slugify(os.path.splitext(os.path.basename(path))[0])
-        # Calculate the date to use for the post
+        # Calculate the date to use for the content
         schedule = options['schedule'] or self.site.config['SCHEDULE_ALL']
         rule = self.site.config['SCHEDULE_RULE']
         force_today = self.site.config['SCHEDULE_FORCE_TODAY']
         self.site.scan_posts()
         timeline = self.site.timeline
         last_date = None if not timeline else timeline[0].date
-        date = get_date(schedule, rule, last_date, force_today)
-        data = [title, slug, date, tags]
+        date = get_date(schedule, rule, last_date, force_today, self.site.tzinfo, self.site.config['FORCE_ISO8601'])
+        data = {
+            'title': title,
+            'slug': slug,
+            'date': date,
+            'tags': tags,
+            'link': '',
+            'description': '',
+            'type': 'text',
+        }
         output_path = os.path.dirname(entry[0])
         meta_path = os.path.join(output_path, slug + ".meta")
         pattern = os.path.basename(entry[0])
@@ -273,19 +320,26 @@ class CommandNewPost(Command):
         d_name = os.path.dirname(txt_path)
         utils.makedirs(d_name)
         metadata = self.site.config['ADDITIONAL_METADATA']
+
+        # Override onefile if not really supported.
+        if not compiler_plugin.supports_onefile and onefile:
+            onefile = False
+            LOGGER.warn('This compiler does not support one-file posts.')
+
+        content = "Write your {0} here.".format('page' if is_page else 'post')
         compiler_plugin.create_post(
-            txt_path, onefile, title=title,
-            slug=slug, date=date, tags=tags, **metadata)
+            txt_path, content=content, onefile=onefile, title=title,
+            slug=slug, date=date, tags=tags, is_page=is_page, **metadata)
 
         event = dict(path=txt_path)
 
         if not onefile:  # write metadata file
             with codecs.open(meta_path, "wb+", "utf8") as fd:
-                fd.write('\n'.join(data))
+                fd.write(utils.write_metadata(data))
             with codecs.open(txt_path, "wb+", "utf8") as fd:
-                fd.write("Write your post here.")
-            LOGGER.notice("Your post's metadata is at: {0}".format(meta_path))
+                fd.write("Write your {0} here.".format(content_type))
+            LOGGER.info("Your {0}'s metadata is at: {1}".format(content_type, meta_path))
             event['meta_path'] = meta_path
-        LOGGER.notice("Your post's text is at: {0}".format(txt_path))
+        LOGGER.info("Your {0}'s text is at: {1}".format(content_type, txt_path))
 
-        signal('new_post').send(self, **event)
+        signal('new_' + content_type).send(self, **event)

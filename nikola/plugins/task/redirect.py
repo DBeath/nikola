@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -63,4 +63,4 @@ def create_redirect(src, dst):
     with codecs.open(src, "wb+", "utf8") as fd:
         fd.write('<!DOCTYPE html><head><title>Redirecting...</title>'
                  '<meta http-equiv="refresh" content="0; '
-                 'url={0}"></head>'.format(dst))
+                 'url={0}"></head><body><p>Page moved <a href="{0}">here</a></p></body>'.format(dst))

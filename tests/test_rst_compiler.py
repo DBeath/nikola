@@ -43,84 +43,16 @@ import tempfile
 
 import docutils
 from lxml import html
-from nose.plugins.skip import SkipTest
+import pytest
 import unittest
-from yapsy.PluginManager import PluginManager
 
-from nikola import utils
 import nikola.plugins.compile.rest
 from nikola.plugins.compile.rest import gist
 from nikola.plugins.compile.rest import vimeo
 import nikola.plugins.compile.rest.listing
 from nikola.plugins.compile.rest.doc import Plugin as DocPlugin
-from nikola.utils import _reload, STDERR_HANDLER
-from nikola.plugin_categories import (
-    Command,
-    Task,
-    LateTask,
-    TemplateSystem,
-    PageCompiler,
-    TaskMultiplier,
-    RestExtension,
-)
-from .base import BaseTestCase
-
-
-class FakePost(object):
-
-    def __init__(self, title, slug):
-        self._title = title
-        self._slug = slug
-        self._meta = {'slug': slug}
-
-    def title(self):
-        return self._title
-
-    def meta(self, key):
-        return self._meta[key]
-
-    def permalink(self):
-        return '/posts/' + self._slug
-
-
-class FakeSite(object):
-    def __init__(self):
-        self.template_system = self
-        self.config = {
-            'DISABLED_PLUGINS': [],
-            'EXTRA_PLUGINS': [],
-            'DEFAULT_LANG': 'en',
-        }
-        self.EXTRA_PLUGINS = self.config['EXTRA_PLUGINS']
-        self.plugin_manager = PluginManager(categories_filter={
-            "Command": Command,
-            "Task": Task,
-            "LateTask": LateTask,
-            "TemplateSystem": TemplateSystem,
-            "PageCompiler": PageCompiler,
-            "TaskMultiplier": TaskMultiplier,
-            "RestExtension": RestExtension,
-        })
-        self.loghandlers = [STDERR_HANDLER]
-        self.plugin_manager.setPluginInfoExtension('plugin')
-        if sys.version_info[0] == 3:
-            places = [
-                os.path.join(os.path.dirname(utils.__file__), 'plugins'),
-            ]
-        else:
-            places = [
-                os.path.join(os.path.dirname(utils.__file__), utils.sys_encode('plugins')),
-            ]
-        self.plugin_manager.setPluginPlaces(places)
-        self.plugin_manager.collectPlugins()
-
-        self.timeline = [
-            FakePost(title='Fake post',
-                     slug='fake-post')
-        ]
-
-    def render_template(self, name, _, context):
-        return('<img src="IMG.jpg">')
+from nikola.utils import _reload
+from .base import BaseTestCase, FakeSite
 
 
 class ReSTExtensionTestCase(BaseTestCase):
@@ -217,17 +149,17 @@ class GistTestCase(ReSTExtensionTestCase):
         self.gist_type.get_raw_gist = lambda *_: "raw_gist"
         _reload(nikola.plugins.compile.rest)
 
+    @pytest.mark.skipif(True, reason="This test indefinitely skipped.")
     def test_gist(self):
         """ Test the gist directive with filename """
-        raise SkipTest
         self.setHtmlFromRst(self.sample)
         output = 'https://gist.github.com/fake_id.js?file=spam.py'
         self.assertHTMLContains("script", attributes={"src": output})
         self.assertHTMLContains("pre", text="raw_gist_file")
 
+    @pytest.mark.skipif(True, reason="This test indefinitely skipped.")
     def test_gist_without_filename(self):
         """ Test the gist directive without filename """
-        raise SkipTest
         self.setHtmlFromRst(self.sample_without_filename)
         output = 'https://gist.github.com/fake_id2.js'
         self.assertHTMLContains("script", attributes={"src": output})
@@ -294,7 +226,7 @@ class VimeoTestCase(ReSTExtensionTestCase):
         """ Test Vimeo iframe tag generation """
         self.basic_test()
         self.assertHTMLContains("iframe",
-                                attributes={"src": ("http://player.vimeo.com/"
+                                attributes={"src": ("//player.vimeo.com/"
                                                     "video/VID"),
                                             "height": "400", "width": "600"})
 
@@ -308,7 +240,7 @@ class YoutubeTestCase(ReSTExtensionTestCase):
         """ Test Youtube iframe tag generation """
         self.basic_test()
         self.assertHTMLContains("iframe",
-                                attributes={"src": ("http://www.youtube.com/"
+                                attributes={"src": ("//www.youtube.com/"
                                                     "embed/YID?rel=0&hd=1&"
                                                     "wmode=transparent"),
                                             "height": "400", "width": "600"})
@@ -322,11 +254,11 @@ class ListingTestCase(ReSTExtensionTestCase):
     sample2 = '.. code-block:: python\n\n   import antigravity'
     sample3 = '.. sourcecode:: python\n\n   import antigravity'
 
-    #def test_listing(self):
-        ##""" Test that we can render a file object contents without errors """
-        ##with cd(os.path.dirname(__file__)):
-            #self.deps = 'listings/nikola.py'
-            #self.setHtmlFromRst(self.sample1)
+    # def test_listing(self):
+    #     """ Test that we can render a file object contents without errors """
+    #     with cd(os.path.dirname(__file__)):
+    #        self.deps = 'listings/nikola.py'
+    #        self.setHtmlFromRst(self.sample1)
 
     def test_codeblock_alias(self):
         """ Test CodeBlock aliases """

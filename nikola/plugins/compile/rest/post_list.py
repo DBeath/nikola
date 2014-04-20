@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2013 Udo Spallek, Roberto Alsina and others.
+# Copyright © 2013-2014 Udo Spallek, Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -32,6 +32,9 @@ from docutils.parsers.rst import Directive, directives
 
 from nikola import utils
 from nikola.plugin_categories import RestExtension
+
+# WARNING: the directive name is post-list
+#          (with a DASH instead of an UNDERSCORE)
 
 
 class Plugin(RestExtension):
@@ -121,7 +124,10 @@ class PostList(Directive):
         show_all = self.options.get('all', False)
         lang = self.options.get('lang', utils.LocaleBorg().current_lang)
         template = self.options.get('template', 'post_list_directive.tmpl')
-        post_list_id = self.options.get('id', 'post_list_' + uuid.uuid4().hex)
+        if self.site.invariant:  # for testing purposes
+            post_list_id = self.options.get('id', 'post_list_' + 'fixedvaluethatisnotauuid')
+        else:
+            post_list_id = self.options.get('id', 'post_list_' + uuid.uuid4().hex)
 
         posts = []
         step = -1 if reverse is None else None

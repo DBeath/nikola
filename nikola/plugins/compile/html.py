@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -27,16 +27,14 @@
 """Implementation of compile_html for HTML source files."""
 
 import os
-import shutil
+import re
 import codecs
 
 from nikola.plugin_categories import PageCompiler
-from nikola.utils import makedirs
+from nikola.utils import makedirs, write_metadata
 
-try:
-    from collections import OrderedDict
-except ImportError:
-    OrderedDict = None  # NOQA
+
+_META_SEPARATOR = '(' + os.linesep * 2 + '|' + ('\n' * 2) + '|' + ("\r\n" * 2) + ')'
 
 
 class CompileHtml(PageCompiler):
@@ -45,21 +43,28 @@ class CompileHtml(PageCompiler):
 
     def compile_html(self, source, dest, is_two_file=True):
         makedirs(os.path.dirname(dest))
-        shutil.copyfile(source, dest)
+        with codecs.open(dest, "w+", "utf8") as out_file:
+            with codecs.open(source, "r", "utf8") as in_file:
+                data = in_file.read()
+            if not is_two_file:
+                data = re.split(_META_SEPARATOR, data, maxsplit=1)[-1]
+            out_file.write(data)
         return True
 
-    def create_post(self, path, onefile=False, **kw):
-        if OrderedDict is not None:
-            metadata = OrderedDict()
-        else:
-            metadata = {}
+    def create_post(self, path, **kw):
+        content = kw.pop('content', None)
+        onefile = kw.pop('onefile', False)
+        # is_page is not used by create_post as of now.
+        kw.pop('is_page', False)
+        metadata = {}
         metadata.update(self.default_metadata)
         metadata.update(kw)
         makedirs(os.path.dirname(path))
+        if not content.endswith('\n'):
+            content += '\n'
         with codecs.open(path, "wb+", "utf8") as fd:
             if onefile:
-                fd.write('<!-- \n')
-                for k, v in metadata.items():
-                    fd.write('.. {0}: {1}\n'.format(k, v))
+                fd.write('<!--\n')
+                fd.write(write_metadata(metadata))
                 fd.write('-->\n\n')
-            fd.write("\n<p>Write your post here.</p>")
+            fd.write(content)

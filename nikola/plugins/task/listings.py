@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -31,6 +31,7 @@ import os
 from pygments import highlight
 from pygments.lexers import get_lexer_for_filename, TextLexer
 from pygments.formatters import HtmlFormatter
+import natsort
 
 from nikola.plugin_categories import Task
 from nikola import utils
@@ -55,7 +56,7 @@ class Listings(Task):
         }
 
         # Things to ignore in listings
-        ignored_extensions = (".pyc",)
+        ignored_extensions = (".pyc", ".pyo")
 
         def render_listing(in_name, out_name, folders=[], files=[]):
             if in_name:
@@ -76,13 +77,21 @@ class Listings(Task):
             crumbs = utils.get_crumbs(os.path.relpath(out_name,
                                                       kw['output_folder']),
                                       is_file=True)
+            permalink = self.site.link(
+                'listing',
+                os.path.relpath(
+                    out_name,
+                    os.path.join(
+                        kw['output_folder'],
+                        kw['listings_folder'])))
             context = {
                 'code': code,
                 'title': title,
                 'crumbs': crumbs,
+                'permalink': permalink,
                 'lang': kw['default_lang'],
-                'folders': folders,
-                'files': files,
+                'folders': natsort.natsorted(folders),
+                'files': natsort.natsorted(files),
                 'description': title,
             }
             self.site.render_template('listing.tmpl', out_name,
@@ -91,7 +100,18 @@ class Listings(Task):
         yield self.group_task()
 
         template_deps = self.site.template_system.template_deps('listing.tmpl')
-        for root, dirs, files in os.walk(kw['listings_folder']):
+        for root, dirs, files in os.walk(kw['listings_folder'], followlinks=True):
+            files = [f for f in files if os.path.splitext(f)[-1] not in ignored_extensions]
+
+            uptodate = {'c': self.site.GLOBAL_CONTEXT}
+
+            for k, v in self.site.GLOBAL_CONTEXT['template_hooks'].items():
+                uptodate['||template_hooks|{0}||'.format(k)] = v._items
+
+            uptodate2 = uptodate.copy()
+            uptodate2['f'] = files
+            uptodate2['d'] = dirs
+
             # Render all files
             out_name = os.path.join(
                 kw['output_folder'],
@@ -105,8 +125,7 @@ class Listings(Task):
                 'actions': [(render_listing, [None, out_name, dirs, files])],
                 # This is necessary to reflect changes in blog title,
                 # sidebar links, etc.
-                'uptodate': [utils.config_changed(
-                    self.site.GLOBAL_CONTEXT)],
+                'uptodate': [utils.config_changed(uptodate2)],
                 'clean': True,
             }
             for f in files:
@@ -126,11 +145,12 @@ class Listings(Task):
                     'actions': [(render_listing, [in_name, out_name])],
                     # This is necessary to reflect changes in blog title,
                     # sidebar links, etc.
-                    'uptodate': [utils.config_changed(
-                        self.site.GLOBAL_CONTEXT)],
+                    'uptodate': [utils.config_changed(uptodate)],
                     'clean': True,
                 }
 
     def listing_path(self, name, lang):
-        return [_f for _f in [self.site.config['LISTINGS_FOLDER'], name +
-                              '.html'] if _f]
+        if not name.endswith('.html'):
+            name += '.html'
+        path_parts = [self.site.config['LISTINGS_FOLDER']] + list(os.path.split(name))
+        return [_f for _f in path_parts if _f]

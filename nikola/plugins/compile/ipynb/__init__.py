@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2013 Damian Avila.
+# Copyright © 2013-2014 Damián Avila and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -46,10 +46,11 @@ class CompileIPynb(PageCompiler):
     """Compile IPynb into HTML."""
 
     name = "ipynb"
+    supports_onefile = False
 
     def compile_html(self, source, dest, is_two_file=True):
         if flag is None:
-            req_missing(['ipython>=1.0.0'], 'build this site (compile ipynb)')
+            req_missing(['ipython>=1.1.0'], 'build this site (compile ipynb)')
         makedirs(os.path.dirname(dest))
         HTMLExporter.default_template = 'basic'
         c = Config(self.site.config['IPYNB_CONFIG'])
@@ -61,23 +62,15 @@ class CompileIPynb(PageCompiler):
             (body, resources) = exportHtml.from_notebook_node(nb_json)
             out_file.write(body)
 
-    def create_post(self, path, onefile=False, **kw):
-        metadata = {}
-        metadata.update(self.default_metadata)
-        metadata.update(kw)
-        d_name = os.path.dirname(path)
+    def create_post(self, path, **kw):
+        # content and onefile are ignored by ipynb.
+        kw.pop('content', None)
+        onefile = kw.pop('onefile', False)
+        kw.pop('is_page', False)
+
         makedirs(os.path.dirname(path))
-        meta_path = os.path.join(d_name, kw['slug'] + ".meta")
-        with codecs.open(meta_path, "wb+", "utf8") as fd:
-            if onefile:
-                fd.write('%s\n' % kw['title'])
-                fd.write('%s\n' % kw['slug'])
-                fd.write('%s\n' % kw['date'])
-                fd.write('%s\n' % kw['tags'])
-                fd.write('%s\n' % kw['link'])
-                fd.write('%s\n' % kw['description'])
-                fd.write('%s\n' % kw['type'])
-        print("Your post's metadata is at: ", meta_path)
+        if onefile:
+            raise Exception('The one-file format is not supported by this compiler.')
         with codecs.open(path, "wb+", "utf8") as fd:
             fd.write("""{
  "metadata": {

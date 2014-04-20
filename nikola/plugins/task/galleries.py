@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -30,12 +30,14 @@ import datetime
 import glob
 import json
 import mimetypes
+from operator import itemgetter
 import os
 try:
     from urlparse import urljoin
 except ImportError:
     from urllib.parse import urljoin  # NOQA
 
+import natsort
 Image = None
 try:
     from PIL import Image, ExifTags  # NOQA
@@ -46,11 +48,13 @@ except ImportError:
         Image = _Image
     except ImportError:
         pass
+
 import PyRSS2Gen as rss
 
 from nikola.plugin_categories import Task
 from nikola import utils
 from nikola.post import Post
+from nikola.utils import req_missing
 
 
 class Galleries(Task):
@@ -77,6 +81,9 @@ class Galleries(Task):
     def gen_tasks(self):
         """Render image galleries."""
 
+        if Image is None:
+            req_missing(['pillow'], 'render galleries')
+
         self.logger = utils.get_logger('render_galleries', self.site.loghandlers)
         self.image_ext_list = ['.jpg', '.png', '.jpeg', '.gif', '.svg', '.bmp', '.tiff']
         self.image_ext_list.extend(self.site.config.get('EXTRA_IMAGE_EXTENSIONS', []))
@@ -93,8 +100,13 @@ class Galleries(Task):
             'filters': self.site.config['FILTERS'],
             'translations': self.site.config['TRANSLATIONS'],
             'global_context': self.site.GLOBAL_CONTEXT,
-            "feed_length": self.site.config['FEED_LENGTH'],
+            'feed_length': self.site.config['FEED_LENGTH'],
+            'tzinfo': self.site.tzinfo,
+            'comments_in_galleries': self.site.config['COMMENTS_IN_GALLERIES'],
         }
+
+        for k, v in self.site.GLOBAL_CONTEXT['template_hooks'].items():
+            self.kw['||template_hooks|{0}||'.format(k)] = v._items
 
         yield self.group_task()
 
@@ -161,17 +173,14 @@ class Galleries(Task):
                 if self.kw['use_filename_as_title']:
                     img_titles = []
                     for fn in image_name_list:
-                        name_without_ext = os.path.splitext(fn)[0]
-                        img_titles.append(
-                            'id="{0}" alt="{1}" title="{2}"'.format(
-                                name_without_ext,
-                                name_without_ext,
-                                utils.unslugify(name_without_ext)))
+                        name_without_ext = os.path.splitext(os.path.basename(fn))[0]
+                        img_titles.append(utils.unslugify(name_without_ext))
                 else:
                     img_titles = [''] * len(image_name_list)
 
                 thumbs = ['.thumbnail'.join(os.path.splitext(p)) for p in image_list]
                 thumbs = [os.path.join(self.kw['output_folder'], t) for t in thumbs]
+                dest_img_list = [os.path.join(self.kw['output_folder'], t) for t in image_list]
 
                 folders = []
 
@@ -184,26 +193,30 @@ class Galleries(Task):
                         ft = folder
                     folders.append((folder, ft))
 
-                ## TODO: in v7 remove images from context, use photo_array
-                context["images"] = list(zip(image_name_list, thumbs, img_titles))
-                context["folders"] = folders
+                context["folders"] = natsort.natsorted(folders, key=itemgetter(1))
                 context["crumbs"] = crumbs
                 context["permalink"] = self.site.link(
-                    "gallery", os.path.basename(gallery), lang)
-                # FIXME: use kw
-                context["enable_comments"] = (
-                    self.site.config["COMMENTS_IN_GALLERIES"])
+                    "gallery", os.path.basename(
+                        os.path.relpath(gallery, self.kw['gallery_path'])), lang)
+                context["enable_comments"] = self.kw['comments_in_galleries']
                 context["thumbnail_size"] = self.kw["thumbnail_size"]
 
-                # FIXME: render post in a task
                 if post:
-                    post.compile(lang)
-                    context['text'] = post.text(lang)
+                    yield {
+                        'basename': self.name,
+                        'name': post.translated_base_path(lang),
+                        'targets': [post.translated_base_path(lang)],
+                        'file_dep': post.fragment_deps(lang),
+                        'actions': [(post.compile, [lang])],
+                        'uptodate': [utils.config_changed(self.kw)]
+                    }
+                    context['post'] = post
                 else:
-                    context['text'] = ''
-
+                    context['post'] = None
                 file_dep = self.site.template_system.template_deps(
                     template_name) + image_list + thumbs
+                if post:
+                    file_dep += [post.translated_base_path(l) for l in self.kw['translations']]
 
                 yield utils.apply_filters({
                     'basename': self.name,
@@ -215,7 +228,8 @@ class Galleries(Task):
                             template_name,
                             dst,
                             context,
-                            image_list,
+                            dest_img_list,
+                            img_titles,
                             thumbs,
                             file_dep))],
                     'clean': True,
@@ -259,7 +273,7 @@ class Galleries(Task):
         """Find all galleries to be processed according to conf.py"""
 
         self.gallery_list = []
-        for root, dirs, files in os.walk(self.kw['gallery_path']):
+        for root, dirs, files in os.walk(self.kw['gallery_path'], followlinks=True):
             self.gallery_list.append(root)
 
     def create_galleries(self):
@@ -427,6 +441,7 @@ class Galleries(Task):
             output_name,
             context,
             img_list,
+            img_titles,
             thumbs,
             file_dep):
         """Build the gallery index."""
@@ -440,12 +455,9 @@ class Galleries(Task):
             return url
 
         photo_array = []
-        for img, thumb in zip(img_list, thumbs):
+        for img, thumb, title in zip(img_list, thumbs, img_titles):
             im = Image.open(thumb)
             w, h = im.size
-            title = ''
-            if self.kw['use_filename_as_title']:
-                title = utils.unslugify(os.path.splitext(img)[0])
             # Thumbs are files in output, we need URLs
             photo_array.append({
                 'url': url_from_path(img),
@@ -456,9 +468,8 @@ class Galleries(Task):
                     'h': h
                 },
             })
-        context['photo_array_json'] = json.dumps(photo_array)
         context['photo_array'] = photo_array
-
+        context['photo_array_json'] = json.dumps(photo_array)
         self.site.render_template(template_name, output_name, context)
 
     def gallery_rss(self, img_list, img_titles, lang, permalink, output_path, title):
@@ -472,12 +483,12 @@ class Galleries(Task):
             return urljoin(self.site.config['BASE_URL'], url)
 
         items = []
-        for img, full_title in list(zip(img_list, img_titles))[:self.kw["feed_length"]]:
+        for img, title in list(zip(img_list, img_titles))[:self.kw["feed_length"]]:
             img_size = os.stat(
                 os.path.join(
                     self.site.config['OUTPUT_FOLDER'], img)).st_size
             args = {
-                'title': full_title.split('"')[-2] if full_title else '',
+                'title': title,
                 'link': make_url(img),
                 'guid': rss.Guid(img, False),
                 'pubDate': self.image_date(img),
@@ -488,17 +499,16 @@ class Galleries(Task):
                 ),
             }
             items.append(rss.RSSItem(**args))
-        rss_obj = utils.ExtendedRSS2(
+        rss_obj = rss.RSS2(
             title=title,
             link=make_url(permalink),
             description='',
             lastBuildDate=datetime.datetime.now(),
             items=items,
-            generator='nikola',
+            generator='http://getnikola.com/',
             language=lang
         )
-        rss_obj.self_url = make_url(permalink)
-        rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
+        rss_obj.rss_attrs["xmlns:dc"] = "http://purl.org/dc/elements/1.1/"
         dst_dir = os.path.dirname(output_path)
         utils.makedirs(dst_dir)
         with codecs.open(output_path, "wb+", "utf-8") as rss_file:
@@ -558,7 +568,7 @@ class Galleries(Task):
             if exif is not None:
                 for tag, value in list(exif.items()):
                     decoded = ExifTags.TAGS.get(tag, tag)
-                    if decoded == 'DateTimeOriginal':
+                    if decoded in ('DateTimeOriginal', 'DateTimeDigitized'):
                         try:
                             self.dates[src] = datetime.datetime.strptime(
                                 value, r'%Y:%m:%d %H:%M:%S')

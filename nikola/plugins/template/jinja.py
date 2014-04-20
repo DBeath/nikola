@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -51,15 +51,34 @@ class JinjaTemplates(TemplateSystem):
         if jinja2 is None:
             return
         self.lookup = jinja2.Environment()
+        self.lookup.trim_blocks = True
+        self.lookup.lstrip_blocks = True
         self.lookup.filters['tojson'] = json.dumps
         self.lookup.globals['enumerate'] = enumerate
 
     def set_directories(self, directories, cache_folder):
-        """Createa  template lookup."""
+        """Create a template lookup."""
         if jinja2 is None:
             req_missing(['jinja2'], 'use this theme')
-        self.lookup.loader = jinja2.FileSystemLoader(directories,
+        self.directories = directories
+        self.create_lookup()
+
+    def inject_directory(self, directory):
+        """if it's not there, add the directory to the lookup with lowest priority, and
+        recreate the lookup."""
+        if directory not in self.directories:
+            self.directories.append(directory)
+            self.create_lookup()
+
+    def create_lookup(self):
+        """Create a template lookup object."""
+        self.lookup.loader = jinja2.FileSystemLoader(self.directories,
                                                      encoding='utf-8')
+
+    def set_site(self, site):
+        """Sets the site."""
+        self.site = site
+        self.lookup.filters.update(self.site.config['TEMPLATE_FILTERS'])
 
     def render_template(self, template_name, output_name, context):
         """Render the template into output_name using context."""
@@ -74,9 +93,8 @@ class JinjaTemplates(TemplateSystem):
         return output
 
     def render_template_to_string(self, template, context):
-        """ Render template to a string using context. """
-
-        return jinja2.Template(template).render(**context)
+        """Render template to a string using context."""
+        return self.lookup.from_string(template).render(**context)
 
     def template_deps(self, template_name):
         # Cache the lists of dependencies for each template name.

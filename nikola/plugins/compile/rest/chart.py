@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -37,13 +37,16 @@ except ImportError:
 from nikola.plugin_categories import RestExtension
 from nikola.utils import req_missing
 
+_site = None
+
 
 class Plugin(RestExtension):
 
     name = "rest_chart"
 
     def set_site(self, site):
-        self.site = site
+        global _site
+        _site = self.site = site
         directives.register_directive('chart', Chart)
         return super(Plugin, self).set_site(site)
 
@@ -146,5 +149,9 @@ class Chart(Directive):
         for line in self.content:
             label, series = literal_eval('({0})'.format(line))
             chart.add(label, series)
-
-        return [nodes.raw('', chart.render().decode('utf8'), format='html')]
+        data = chart.render().decode('utf8')
+        if _site and _site.invariant:
+            import re
+            data = re.sub('id="chart-[a-f0-9\-]+"', 'id="chart-foobar"', data)
+            data = re.sub('#chart-[a-f0-9\-]+', '#chart-foobar', data)
+        return [nodes.raw('', data, format='html')]

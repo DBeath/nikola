@@ -15,19 +15,36 @@ import shutil
 
 from setuptools import setup
 from setuptools.command.install import install
+from setuptools.command.test import test as TestCommand
+
+
+class PyTest(TestCommand):
+    def finalize_options(self):
+        TestCommand.finalize_options(self)
+        self.test_args = []
+        self.test_suite = True
+
+    def run_tests(self):
+        # import here, cause outside the eggs aren't loaded
+        import pytest
+        errno = pytest.main(self.test_args)
+        sys.exit(errno)
+
 
 with open('requirements.txt', 'r') as fh:
     dependencies = [l.strip() for l in fh]
 
-########### platform specific stuff #############
-import platform
-platform_system = platform.system()
+extras = {}
 
-scripts = ['scripts/nikola']
-# platform specific scripts
-if platform_system == "Windows":
-    scripts.append('scripts/nikola.bat')
+with open('requirements-extras.txt', 'r') as fh:
+    extras['extras'] = [l.strip() for l in fh][1:]
+    # Alternative name.
+    extras['full'] = extras['extras']
 
+with open('requirements-tests.txt', 'r') as fh:
+    extras['tests'] = [l.strip() for l in fh][1:]
+
+# ########## platform specific stuff #############
 if sys.version_info[0] == 2 and sys.version_info[1] < 6:
     raise Exception('Python 2 version < 2.6 is not supported')
 elif sys.version_info[0] == 3 and sys.version_info[1] < 3:
@@ -127,15 +144,30 @@ def install_manpages(root, prefix):
         print("Not installing the man pages:", e)
 
 
+def remove_old_files(self):
+    tree = os.path.join(self.install_lib, 'nikola')
+    tree2 = os.path.join('build', 'lib', 'nikola')
+    try:
+        shutil.rmtree(tree, ignore_errors=True)
+    except:
+        pass
+
+    try:
+        shutil.rmtree(tree2, ignore_errors=True)
+    except:
+        pass
+
+
 class nikola_install(install):
     def run(self):
         copy_symlinked_for_windows()
+        remove_old_files(self)
         install.run(self)
         install_manpages(self.root, self.prefix)
 
 
 setup(name='Nikola',
-      version='6.2.1',
+      version='7.0.0-alpha',
       description='A modular, fast, simple, static website generator',
       long_description=open('README.rst').read(),
       author='Roberto Alsina and others',
@@ -144,20 +176,16 @@ setup(name='Nikola',
       packages=['nikola',
                 'nikola.plugins',
                 'nikola.plugins.command',
-                'nikola.plugins.command.planetoid',
                 'nikola.plugins.compile',
                 'nikola.plugins.compile.ipynb',
                 'nikola.plugins.compile.markdown',
                 'nikola.plugins.compile.rest',
                 'nikola.plugins.task',
-                'nikola.plugins.task.localsearch',
-                'nikola.plugins.task.mustache',
                 'nikola.plugins.task.sitemap',
                 'nikola.plugins.template',
                 ],
       license='MIT',
       keywords='website, static',
-      scripts=scripts,
       classifiers=('Development Status :: 5 - Production/Stable',
                    'Environment :: Console',
                    'Environment :: Plugins',
@@ -177,12 +205,19 @@ setup(name='Nikola',
                    'Topic :: Internet :: WWW/HTTP',
                    'Topic :: Text Processing :: Markup'),
       install_requires=dependencies,
+      extras_require=extras,
+      tests_require=['pytest'],
       include_package_data=True,
-      cmdclass={'install': nikola_install},
+      cmdclass={'install': nikola_install, 'test': PyTest},
       data_files=[
               ('share/doc/nikola', [
                'docs/manual.txt',
                'docs/theming.txt',
                'docs/extending.txt']),
       ],
+      entry_points = {
+          'console_scripts': [
+              'nikola = nikola.__main__:main'
+          ]
+      },
       )

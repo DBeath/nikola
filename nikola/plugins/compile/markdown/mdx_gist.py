@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# Copyright (c) 2013 Michael Rabbitt.
+# Copyright © 2013 Michael Rabbitt.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the
@@ -117,10 +117,18 @@ Error Case:  non-existent file:
 
 '''
 from __future__ import unicode_literals, print_function
-from markdown.extensions import Extension
-from markdown.inlinepatterns import Pattern
-from markdown.util import AtomicString
-from markdown.util import etree
+
+try:
+    from markdown.extensions import Extension
+    from markdown.inlinepatterns import Pattern
+    from markdown.util import AtomicString
+    from markdown.util import etree
+except ImportError:
+    # No need to catch this, if you try to use this without Markdown,
+    # the markdown compiler will fail first
+    Extension = Pattern = object
+
+from nikola.plugin_categories import MarkdownExtension
 from nikola.utils import get_logger, req_missing, STDERR_HANDLER
 
 LOGGER = get_logger('compile_markdown.mdx_gist', STDERR_HANDLER)
@@ -209,7 +217,7 @@ class GistPattern(Pattern):
         return gist_elem
 
 
-class GistExtension(Extension):
+class GistExtension(MarkdownExtension, Extension):
     def __init__(self, configs={}):
         # set extension defaults
         self.config = {}

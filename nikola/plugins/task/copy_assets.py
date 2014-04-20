@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -61,8 +61,7 @@ class CopyAssets(Task):
             for task in utils.copy_tree(src, dst):
                 if task['name'] in tasks:
                     continue
-                if task['targets'][0] == code_css_path:
-                    has_code_css = True
+                has_code_css = task['targets'][0] == code_css_path
                 tasks[task['name']] = task
                 task['uptodate'] = [utils.config_changed(kw)]
                 task['basename'] = self.name
@@ -75,8 +74,8 @@ class CopyAssets(Task):
                 formatter = get_formatter_by_name('html', style=kw["code_color_scheme"])
                 utils.makedirs(os.path.dirname(code_css_path))
                 with codecs.open(code_css_path, 'wb+', 'utf8') as outf:
-                    outf.write(formatter.get_style_defs('.code'))
-                    outf.write("table.codetable { width: 100%;} td.linenos {text-align: right; width: 4em;}")
+                    outf.write(formatter.get_style_defs(['pre.code', 'div.code pre']))
+                    outf.write("\ntable.codetable { width: 100%;} td.linenos {text-align: right; width: 4em;}\n")
 
             task = {
                 'basename': self.name,

@@ -1,6 +1,7 @@
 before_install:
   - "if [[ $NMODE == 'nikola' ]]; then sudo apt-get update -qq || true; fi"
   - "if [[ $NMODE == 'nikola' ]]; then sudo apt-get --reinstall install -qq language-pack-en-base language-pack-pl-base; fi"
+  - "pip install --upgrade pip wheel"
 language: python
 cache: apt
 python:
@@ -14,14 +15,18 @@ matrix:
 env:
     NMODE=nikola
 install:
-  - "if [[ $NMODE == 'nikola' ]]; then pip install -r requirements-tests.txt --use-mirrors; fi"
-  - "if [[ $NMODE == 'nikola' ]]; then pip install . --use-mirrors; fi"
-  - "if [[ $NMODE == 'flake8' ]]; then pip install flake8 --use-mirrors; fi"
-# We run tests, nikola (to see if the command is executable) and flake8.
+  - "if [[ $NMODE == 'nikola' ]]; then scripts/getwheelhouse.sh $(scripts/getpyver.py short); fi"
+  - "if [[ $NMODE == 'nikola' ]]; then pip install -r requirements-tests.txt; fi"
+  - "if [[ $NMODE == 'nikola' ]]; then pip install .; fi"
+  - "if [[ $NMODE == 'nikola' ]]; then scripts/getbaseline.sh $(scripts/getpyver.py short); fi"
+  - "if [[ $NMODE == 'flake8' ]]; then pip install flake8; fi"
+# We run tests and nikola (to see if the command is executable) OR flake8.
+# WARNING: if you edit this, make sure to replicate your changes in dodo.py.
 script:
-  - "if [[ $NMODE == 'nikola' ]]; then nosetests --with-coverage --cover-package=nikola --with-doctest --doctest-options=+NORMALIZE_WHITESPACE --logging-filter=-yapsy; fi"
+  - "if [[ $NMODE == 'nikola' ]]; then py.test --doctest-modules nikola/; fi"
+  - "if [[ $NMODE == 'nikola' ]]; then py.test --cov nikola --cov-report term-missing tests/; fi"
   - "if [[ $NMODE == 'nikola' ]]; then nikola help; fi"
-  - "if [[ $NMODE == 'flake8' ]]; then flake8 --ignore=E501 .; fi"
+  - "if [[ $NMODE == 'flake8' ]]; then flake8 nikola/; fi"
 after_success:
   - "if [[ $NMODE == 'nikola' ]]; then coveralls; fi"
 notifications:

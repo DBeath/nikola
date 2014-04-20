@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -30,12 +30,12 @@ from __future__ import print_function, unicode_literals
 from collections import defaultdict, Callable
 import calendar
 import datetime
+import dateutil.tz
 import hashlib
 import locale
 import logging
 import os
 import re
-import codecs
 import json
 import shutil
 import subprocess
@@ -46,13 +46,25 @@ try:
 except ImportError:
     pass
 
+import dateutil.parser
+import dateutil.tz
 import logbook
-from logbook.more import ExceptionHandler
-import pytz
+from logbook.more import ExceptionHandler, ColorizedStderrHandler
+
+from . import DEBUG
 
 
 class ApplicationWarning(Exception):
     pass
+
+
+class ColorfulStderrHandler(ColorizedStderrHandler):
+    """Stream handler with colors."""
+    _colorful = False
+
+    def should_colorize(self, record):
+        """Inform about colorization using the value obtained from Nikola."""
+        return self._colorful
 
 
 def get_logger(name, handlers):
@@ -60,29 +72,51 @@ def get_logger(name, handlers):
     l = logbook.Logger(name)
     for h in handlers:
         if isinstance(h, list):
-            l.handlers += h
+            l.handlers = h
         else:
-            l.handlers.append(h)
+            l.handlers = [h]
     return l
 
 
-STDERR_HANDLER = [logbook.StderrHandler(
-    level=logbook.NOTICE if not os.getenv('NIKOLA_DEBUG') else logbook.DEBUG,
+STDERR_HANDLER = [ColorfulStderrHandler(
+    level=logbook.INFO if not DEBUG else logbook.DEBUG,
     format_string=u'[{record.time:%Y-%m-%dT%H:%M:%SZ}] {record.level_name}: {record.channel}: {record.message}'
 )]
 LOGGER = get_logger('Nikola', STDERR_HANDLER)
 STRICT_HANDLER = ExceptionHandler(ApplicationWarning, level='WARNING')
 
-if os.getenv('NIKOLA_DEBUG'):
+# This will block out the default handler and will hide all unwanted
+# messages, properly.
+logbook.NullHandler().push_application()
+
+if DEBUG:
     logging.basicConfig(level=logging.DEBUG)
 else:
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.INFO)
 
 
 def req_missing(names, purpose, python=True, optional=False):
-    """Log that we are missing some requirements."""
+    """Log that we are missing some requirements.
+
+    `names` is a list/tuple/set of missing things.
+    `purpose` is a string, specifying the use of the missing things.
+              It completes the sentence:
+                  In order to {purpose}, you must install ...
+    `python` specifies whether the requirements are Python packages
+                               or other software.
+    `optional` specifies whether the things are required
+                                 (this is an error and we exit with code 5)
+                                 or not (this is just a warning).
+
+    Returns the message shown to the user (which you can usually discard).
+    If no names are specified, False is returned and nothing is shown
+    to the user.
+
+    """
     if not (isinstance(names, tuple) or isinstance(names, list) or isinstance(names, set)):
         names = (names,)
+    if not names:
+        return False
     if python:
         whatarethey_s = 'Python package'
         whatarethey_p = 'Python packages'
@@ -101,7 +135,8 @@ def req_missing(names, purpose, python=True, optional=False):
         LOGGER.warn(msg)
     else:
         LOGGER.error(msg)
-        raise Exception('Missing dependencies: {0}'.format(', '.join(names)))
+        LOGGER.error('Exiting due to missing dependencies.')
+        sys.exit(5)
 
     return msg
 
@@ -119,15 +154,20 @@ else:
 
 from doit import tools
 from unidecode import unidecode
+from pkg_resources import resource_filename
 
 import PyRSS2Gen as rss
 
 __all__ = ['get_theme_path', 'get_theme_chain', 'load_messages', 'copy_tree',
-           'generic_rss_renderer', 'copy_file', 'slugify', 'unslugify',
-           'to_datetime', 'apply_filters', 'config_changed', 'get_crumbs',
-           'get_tzname', 'get_asset_path', '_reload', 'unicode_str', 'bytes_str',
-           'unichr', 'Functionary', 'LocaleBorg', 'sys_encode', 'sys_decode',
-           'makedirs', 'get_parent_theme_name', 'ExtendedRSS2', 'demote_headers']
+           'copy_file', 'slugify', 'unslugify', 'to_datetime', 'apply_filters',
+           'config_changed', 'get_crumbs', 'get_tzname', 'get_asset_path',
+           '_reload', 'unicode_str', 'bytes_str', 'unichr', 'Functionary',
+           'TranslatableSetting', 'TemplateHookRegistry', 'LocaleBorg',
+           'sys_encode', 'sys_decode', 'makedirs', 'get_parent_theme_name',
+           'demote_headers', 'get_translation_candidate', 'write_metadata']
+
+# Are you looking for 'generic_rss_renderer'?
+# It's defined in nikola.nikola.Nikola (the site object).
 
 
 ENCODING = sys.getfilesystemencoding() or sys.stdin.encoding
@@ -173,6 +213,259 @@ class Functionary(defaultdict):
         return self[lang][key]
 
 
+class TranslatableSetting(object):
+
+    """
+    A setting that can be translated.
+
+    You can access it via: SETTING(lang).  You can omit lang, in which
+    case Nikola will ask LocaleBorg, unless you set SETTING.lang,
+    which overrides that call.
+
+    You can also stringify the setting and you will get something
+    sensible (in what LocaleBorg claims the language is, can also be
+    overriden by SETTING.lang). Note that this second method is
+    deprecated.  It is kept for backwards compatibility and
+    safety.  It is not guaranteed.
+
+    The underlying structure is a defaultdict.  The language that
+    is the default value of the dict is provided with __init__().
+    If you need access the underlying dict (you generally don’t,
+    """
+
+    # WARNING: This is generally not used and replaced with a call to
+    #          LocaleBorg().  Set this to a truthy value to override that.
+    lang = None
+
+    # Note that this setting is global.  DO NOT set on a per-instance basis!
+    default_lang = 'en'
+
+    def __getattribute__(self, attr):
+        """Return attributes, falling back to string attributes."""
+        try:
+            return super(TranslatableSetting, self).__getattribute__(attr)
+        except AttributeError:
+            return self().__getattribute__(attr)
+
+    def __dir__(self):
+        return list(set(self.__dict__).union(set(dir(str))))
+
+    def __init__(self, name, inp, translations):
+        """Initialize a translated setting.
+
+        Valid inputs include:
+
+        * a string               -- the same will be used for all languages
+        * a dict ({lang: value}) -- each language will use the value specified;
+                                    if there is none, default_lang is used.
+
+        """
+        self.name = name
+        self._inp = inp
+        self.translations = translations
+        self.overriden_default = False
+        self.values = defaultdict()
+
+        if isinstance(inp, dict):
+            self.translated = True
+            self.values.update(inp)
+            if self.default_lang not in self.values.keys():
+                self.default_lang = list(self.values.keys())[0]
+                self.overridden_default = True
+            self.values.default_factory = lambda: self.values[self.default_lang]
+            for k in translations.keys():
+                if k not in self.values.keys():
+                    self.values[k] = inp[self.default_lang]
+        else:
+            self.translated = False
+            self.values[self.default_lang] = inp
+            self.values.default_factory = lambda: inp
+
+    def get_lang(self):
+        """Return the language that should be used to retrieve settings."""
+        if self.lang:
+            return self.lang
+        elif not self.translated:
+            return self.default_lang
+        else:
+            try:
+                return LocaleBorg().current_lang
+            except AttributeError:
+                return self.default_lang
+
+    def __call__(self, lang=None):
+        """
+        Return the value in the requested language.
+
+        While lang is None, self.lang (currently set language) is used.
+        Otherwise, the standard algorithm is used (see above).
+
+        """
+        if lang is None:
+            return self.values[self.get_lang()]
+        else:
+            return self.values[lang]
+
+    def __str__(self):
+        """Return the value in the currently set language.  (deprecated)"""
+        return self.values[self.get_lang()]
+
+    def __unicode__(self):
+        """Return the value in the currently set language.  (deprecated)"""
+        return self.values[self.get_lang()]
+
+    def __repr__(self):
+        """Provide a representation for programmers."""
+        header = '<TranslatableSetting> '
+
+        if not self.translated:
+            values = [repr(self())]
+        else:
+            values = ['{0}={1!r}'.format(k, v) for k, v in self.values.items()]
+
+        return header + ', '.join(values)
+
+    def format(self, *args, **kwargs):
+        """Format ALL the values in the setting the same way."""
+        for l in self.values:
+            self.values[l] = self.values[l].format(*args, **kwargs)
+        self.values.default_factory = lambda: self.values[self.default_lang]
+        return self
+
+    def langformat(self, formats):
+        """Format ALL the values in the setting, on a per-language basis."""
+        if not formats:
+            # Input is empty.
+            return self
+        else:
+            # This is a little tricky.
+            # Basically, we have some things that may very well be dicts.  Or
+            # actually, TranslatableSettings in the original unprocessed dict
+            # form.  We need to detect them.
+
+            # First off, we need to check what languages we have and what
+            # should we use as the default.
+            keys = list(formats)
+            if self.default_lang in keys:
+                d = formats[self.default_lang]
+            else:
+                d = formats[keys[0]]
+            # Discovering languages of the settings here.
+            langkeys = []
+            for f in formats.values():
+                for a in f[0] + tuple(f[1].values()):
+                    if isinstance(a, dict):
+                        langkeys += list(a)
+            # Now that we know all this, we go through all the languages we have.
+            allvalues = set(keys + langkeys + list(self.values))
+            for l in allvalues:
+                if l in keys:
+                    oargs, okwargs = formats[l]
+                else:
+                    oargs, okwargs = d
+
+                args = []
+                kwargs = {}
+
+                for a in oargs:
+                    # We create temporary TranslatableSettings and replace the
+                    # values with them.
+                    if isinstance(a, dict):
+                        a = TranslatableSetting('NULL', a)
+                        args.append(a(l))
+                    else:
+                        args.append(a)
+
+                for k, v in okwargs.items():
+                    if isinstance(v, dict):
+                        v = TranslatableSetting('NULL', v)
+                        kwargs.update({k: v(l)})
+                    else:
+                        kwargs.update({k: v})
+
+                self.values[l] = self.values[l].format(*args, **kwargs)
+                self.values.default_factory = lambda: self.values[self.default_lang]
+
+        return self
+
+    def __getitem__(self, key):
+        """Provide an alternate interface via __getitem__."""
+        return self.values[key]
+
+    def __setitem__(self, key, value):
+        """Set values for translations."""
+        self.values[key] = value
+
+    def __eq__(self, other):
+        """Test whether two TranslatableSettings are equal."""
+        return self.values == other.values
+
+    def __ne__(self, other):
+        """Test whether two TranslatableSettings are inequal."""
+        return self.values != other.values
+
+
+class TemplateHookRegistry(object):
+
+    """
+    A registry for template hooks.
+
+    Usage:
+
+    >>> r = TemplateHookRegistry('foo', None)
+    >>> r.append('Hello!')
+    >>> r.append(lambda x: 'Hello ' + x + '!', False, 'world')
+    >>> str(r())  # str() call is not recommended in real use
+    'Hello!\\nHello world!'
+    >>>
+    """
+
+    def __init__(self, name, site):
+        """Initialize a hook registry."""
+        self._items = []
+        self.name = name
+        self.site = site
+        self.context = None
+
+    def generate(self):
+        """Generate items."""
+        for c, inp, site, args, kwargs in self._items:
+            if c:
+                if site:
+                    kwargs['site'] = self.site
+                    kwargs['context'] = self.context
+                yield inp(*args, **kwargs)
+            else:
+                yield inp
+
+    def __call__(self):
+        """Return items, in a string, separated by newlines."""
+        return '\n'.join(self.generate())
+
+    def append(self, inp, wants_site_and_context=False, *args, **kwargs):
+        """
+        Register an item.
+
+        `inp` can be a string or a callable returning one.
+        `wants_site` tells whether there should be a `site` keyword
+                     argument provided, for accessing the site.
+
+        Further positional and keyword arguments are passed as-is to the
+        callable.
+
+        `wants_site`, args and kwargs are ignored (but saved!) if `inp`
+        is not callable.  Callability of `inp` is determined only once.
+        """
+        c = callable(inp)
+        self._items.append((c, inp, wants_site_and_context, args, kwargs))
+
+    def __hash__(self):
+        return config_changed({self.name: self._items})
+
+    def __str__(self):
+        return '<TemplateHookRegistry: {0}>'.format(self._items)
+
+
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
         try:
@@ -194,7 +487,9 @@ class config_changed(tools.config_changed):
                 byte_data = data.encode("utf-8")
             else:
                 byte_data = data
-            return hashlib.md5(byte_data).hexdigest()
+            digest = hashlib.md5(byte_data).hexdigest()
+            # LOGGER.debug('{{"{0}": {1}}}'.format(digest, byte_data))
+            return digest
         else:
             raise Exception('Invalid type of config_changed parameter -- got '
                             '{0}, must be string or dict'.format(type(
@@ -213,8 +508,7 @@ def get_theme_path(theme):
     dir_name = os.path.join('themes', theme)
     if os.path.isdir(dir_name):
         return dir_name
-    dir_name = os.path.join(os.path.dirname(__file__),
-                            'data', 'themes', theme)
+    dir_name = resource_filename('nikola', os.path.join('data', 'themes', theme))
     if os.path.isdir(dir_name):
         return dir_name
     raise Exception("Can't find theme '{0}'".format(theme))
@@ -254,6 +548,15 @@ def get_theme_chain(theme):
 warned = []
 
 
+class LanguageNotFoundError(Exception):
+    def __init__(self, lang, orig):
+        self.lang = lang
+        self.orig = orig
+
+    def __str__(self):
+        return 'cannot find language {0}'.format(self.lang)
+
+
 def load_messages(themes, translations, default_lang):
     """ Load theme's messages into context.
 
@@ -269,18 +572,23 @@ def load_messages(themes, translations, default_lang):
         sys.path.insert(0, msg_folder)
         english = __import__('messages_en')
         for lang in list(translations.keys()):
-            # If we don't do the reload, the module is cached
-            translation = __import__('messages_' + lang)
-            reload(translation)
-            if sorted(translation.MESSAGES.keys()) !=\
-                    sorted(english.MESSAGES.keys()) and \
-                    lang not in warned:
-                warned.append(lang)
-                LOGGER.warn("Incomplete translation for language "
-                            "'{0}'.".format(lang))
-            messages[lang].update(english.MESSAGES)
-            messages[lang].update(translation.MESSAGES)
-            del(translation)
+            try:
+                translation = __import__('messages_' + lang)
+                # If we don't do the reload, the module is cached
+                reload(translation)
+                if sorted(translation.MESSAGES.keys()) !=\
+                        sorted(english.MESSAGES.keys()) and \
+                        lang not in warned:
+                    warned.append(lang)
+                    LOGGER.warn("Incomplete translation for language "
+                                "'{0}'.".format(lang))
+                messages[lang].update(english.MESSAGES)
+                for k, v in translation.MESSAGES.items():
+                    if v:
+                        messages[lang][k] = v
+                del(translation)
+            except ImportError as orig:
+                raise LanguageNotFoundError(lang, orig)
     sys.path = oldpath
     return messages
 
@@ -302,63 +610,24 @@ def copy_tree(src, dst, link_cutoff=None):
     """
     ignore = set(['.svn'])
     base_len = len(src.split(os.sep))
-    for root, dirs, files in os.walk(src):
+    for root, dirs, files in os.walk(src, followlinks=True):
         root_parts = root.split(os.sep)
         if set(root_parts) & ignore:
             continue
         dst_dir = os.path.join(dst, *root_parts[base_len:])
         makedirs(dst_dir)
         for src_name in files:
-            if src_name == '.DS_Store':
+            if src_name in ('.DS_Store', 'Thumbs.db'):
                 continue
             dst_file = os.path.join(dst_dir, src_name)
             src_file = os.path.join(root, src_name)
             yield {
-                'name': str(dst_file),
+                'name': dst_file,
                 'file_dep': [src_file],
                 'targets': [dst_file],
                 'actions': [(copy_file, (src_file, dst_file, link_cutoff))],
                 'clean': True,
             }
-
-
-def generic_rss_renderer(lang, title, link, description, timeline, output_path,
-                         rss_teasers, feed_length=10, feed_url=None):
-    """Takes all necessary data, and renders a RSS feed in output_path."""
-    items = []
-    for post in timeline[:feed_length]:
-        args = {
-            'title': post.title(lang),
-            'link': post.permalink(lang, absolute=True),
-            'description': post.text(lang, teaser_only=rss_teasers, really_absolute=True),
-            'guid': post.permalink(lang, absolute=True),
-            # PyRSS2Gen's pubDate is GMT time.
-            'pubDate': (post.date if post.date.tzinfo is None else
-                        post.date.astimezone(pytz.timezone('UTC'))),
-            'categories': post._tags.get(lang, []),
-            'author': post.meta('author'),
-        }
-
-        items.append(ExtendedItem(**args))
-    rss_obj = ExtendedRSS2(
-        title=title,
-        link=link,
-        description=description,
-        lastBuildDate=datetime.datetime.now(),
-        items=items,
-        generator='nikola',
-        language=lang
-    )
-    rss_obj.self_url = feed_url
-    rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
-    rss_obj.rss_attrs["xmlns:dc"] = "http://purl.org/dc/elements/1.1/"
-    dst_dir = os.path.dirname(output_path)
-    makedirs(dst_dir)
-    with codecs.open(output_path, "wb+", "utf-8") as rss_file:
-        data = rss_obj.to_xml(encoding='utf-8')
-        if isinstance(data, bytes_str):
-            data = data.decode('utf-8')
-        rss_file.write(data)
 
 
 def copy_file(source, dest, cutoff=None):
@@ -455,41 +724,16 @@ def extract_all(zipfile, path='themes'):
     os.chdir(pwd)
 
 
-# From https://github.com/lepture/liquidluck/blob/develop/liquidluck/utils.py
 def to_datetime(value, tzinfo=None):
-    if isinstance(value, datetime.datetime):
-        return value
-    supported_formats = [
-        '%Y/%m/%d %H:%M',
-        '%Y/%m/%d %H:%M:%S',
-        '%Y/%m/%d %I:%M:%S %p',
-        '%a %b %d %H:%M:%S %Y',
-        '%Y-%m-%d %H:%M:%S',
-        '%Y-%m-%d %H:%M',
-        '%Y-%m-%dT%H:%M',
-        '%Y%m%d %H:%M:%S',
-        '%Y%m%d %H:%M',
-        '%Y-%m-%d',
-        '%Y%m%d',
-    ]
-    for format in supported_formats:
-        try:
-            dt = datetime.datetime.strptime(value, format)
-            if tzinfo is None:
-                return dt
-            # Build a localized time by using a given time zone.
-            return tzinfo.localize(dt)
-        except ValueError:
-            pass
-    # So, let's try dateutil
     try:
-        from dateutil import parser
-        dt = parser.parse(value)
-        if tzinfo is None or dt.tzinfo:
-            return dt
-        return tzinfo.localize(dt)
-    except ImportError:
-        raise ValueError('Unrecognized date/time: {0!r}, try installing dateutil...'.format(value))
+        if not isinstance(value, datetime.datetime):
+            # dateutil does bad things with TZs like UTC-03:00.
+            dateregexp = re.compile(r' UTC([+-][0-9][0-9]:[0-9][0-9])')
+            value = re.sub(dateregexp, r'\1', value)
+            value = dateutil.parser.parse(value)
+        if not value.tzinfo:
+            value = value.replace(tzinfo=tzinfo)
+        return value
     except Exception:
         raise ValueError('Unrecognized date/time: {0!r}'.format(value))
 
@@ -497,26 +741,19 @@ def to_datetime(value, tzinfo=None):
 def get_tzname(dt):
     """
     Given a datetime value, find the name of the time zone.
-    """
-    try:
-        from dateutil import tz
-    except ImportError:
-        raise ValueError('Unrecognized date/time: {0!r}, try installing dateutil...'.format(dt))
 
-    tzoffset = dt.strftime('%z')
-    for name in pytz.common_timezones:
-        timezone = tz.gettz(name)
-        now = dt.now(timezone)
-        offset = now.strftime('%z')
-        if offset == tzoffset:
-            return name
-    raise ValueError('Unrecognized date/time: {0!r}'.format(dt))
+    DEPRECATED: This thing returned basically the 1st random zone
+    that matched the offset.
+    """
+    return dt.tzname()
 
 
 def current_time(tzinfo=None):
-    dt = datetime.datetime.now()
     if tzinfo is not None:
-        dt = tzinfo.localize(dt)
+        dt = datetime.datetime.utcnow()
+        dt = tzinfo.fromutc(dt)
+    else:
+        dt = datetime.datetime.now(dateutil.tz.tzlocal())
     return dt
 
 
@@ -620,17 +857,17 @@ def get_asset_path(path, themes, files_folders={'files': ''}):
     If the asset is not provided by a theme, then it will be checked for
     in the FILES_FOLDERS
 
-    >>> print(get_asset_path('assets/css/rst.css', ['bootstrap', 'base'])) # doctest: +SKIP
-    [...]/nikola/data/themes/base/assets/css/rst.css
+    >>> print(get_asset_path('assets/css/rst.css', ['bootstrap', 'base']))
+    /.../nikola/data/themes/base/assets/css/rst.css
 
-    >>> print(get_asset_path('assets/css/theme.css', ['bootstrap', 'base'])) # doctest: +SKIP
-    [...]/nikola/data/themes/bootstrap/assets/css/theme.css
+    >>> print(get_asset_path('assets/css/theme.css', ['bootstrap', 'base']))
+    /.../nikola/data/themes/bootstrap/assets/css/theme.css
 
-    >>> print(get_asset_path('nikola.py', ['bootstrap', 'base'], {'nikola': ''})) # doctest: +SKIP
-    [...]/nikola/nikola.py
+    >>> print(get_asset_path('nikola.py', ['bootstrap', 'base'], {'nikola': ''}))
+    /.../nikola/nikola.py
 
-    >>> print(get_asset_path('nikola/nikola.py', ['bootstrap', 'base'], {'nikola':'nikola'})) # doctest: +SKIP
-    [...]/nikola/nikola.py
+    >>> print(get_asset_path('nikola/nikola.py', ['bootstrap', 'base'], {'nikola':'nikola'}))
+    None
 
     """
     for theme_name in themes:
@@ -745,32 +982,20 @@ class LocaleBorg(object):
         else:  # Python 2
             with calendar.TimeEncoding(self.locales[lang]):
                 s = calendar.month_name[month_no]
-            s = s.decode(self.encodings[lang])
+            enc = self.encodings[lang]
+            if not enc:
+                enc = 'UTF-8'
+
+            s = s.decode(enc)
         # paranoid about calendar ending in the wrong locale (windows)
         self.set_locale(self.current_lang)
         return s
 
 
-class ExtendedRSS2(rss.RSS2):
-    def publish_extensions(self, handler):
-        if self.self_url:
-            handler.startElement("atom:link", {
-                'href': self.self_url,
-                'rel': "self",
-                'type': "application/rss+xml"
-            })
-            handler.endElement("atom:link")
-
-
 class ExtendedItem(rss.RSSItem):
 
     def __init__(self, **kw):
-        author = kw.pop('author')
-        if author and '@' in author[1:]:  # Yes, this is a silly way to validate an email
-            kw['author'] = author
-            self.creator = None
-        else:
-            self.creator = author
+        self.creator = kw.pop('creator')
         # It's an old style class
         return rss.RSSItem.__init__(self, **kw)
 
@@ -836,3 +1061,86 @@ def get_root_dir():
             root = basedir
 
     return None
+
+
+def get_translation_candidate(config, path, lang):
+    """
+    Return a possible path where we can find the translated version of some page
+    based on the TRANSLATIONS_PATTERN configuration variable.
+
+    >>> config = {'TRANSLATIONS_PATTERN': '{path}.{lang}.{ext}', 'DEFAULT_LANG': 'en', 'TRANSLATIONS': {'es':'1', 'en': 1}}
+    >>> print(get_translation_candidate(config, '*.rst', 'es'))
+    *.es.rst
+    >>> print(get_translation_candidate(config, 'fancy.post.rst', 'es'))
+    fancy.post.es.rst
+    >>> print(get_translation_candidate(config, '*.es.rst', 'es'))
+    *.es.rst
+    >>> print(get_translation_candidate(config, '*.es.rst', 'en'))
+    *.rst
+    >>> print(get_translation_candidate(config, 'cache/posts/fancy.post.es.html', 'en'))
+    cache/posts/fancy.post.html
+    >>> print(get_translation_candidate(config, 'cache/posts/fancy.post.html', 'es'))
+    cache/posts/fancy.post.es.html
+    >>> print(get_translation_candidate(config, 'cache/stories/charts.html', 'es'))
+    cache/stories/charts.es.html
+    >>> print(get_translation_candidate(config, 'cache/stories/charts.html', 'en'))
+    cache/stories/charts.html
+
+    >>> config = {'TRANSLATIONS_PATTERN': '{path}.{ext}.{lang}', 'DEFAULT_LANG': 'en', 'TRANSLATIONS': {'es':'1', 'en': 1}}
+    >>> print(get_translation_candidate(config, '*.rst', 'es'))
+    *.rst.es
+    >>> print(get_translation_candidate(config, '*.rst.es', 'es'))
+    *.rst.es
+    >>> print(get_translation_candidate(config, '*.rst.es', 'en'))
+    *.rst
+    >>> print(get_translation_candidate(config, 'cache/posts/fancy.post.html.es', 'en'))
+    cache/posts/fancy.post.html
+    >>> print(get_translation_candidate(config, 'cache/posts/fancy.post.html', 'es'))
+    cache/posts/fancy.post.html.es
+
+    """
+    # FIXME: this is rather slow and this function is called A LOT
+    # Convert the pattern into a regexp
+    pattern = config['TRANSLATIONS_PATTERN']
+    # This will still break if the user has ?*[]\ in the pattern. But WHY WOULD HE?
+    pattern = pattern.replace('.', r'\.')
+    pattern = pattern.replace('{path}', '(?P<path>.+?)')
+    pattern = pattern.replace('{ext}', '(?P<ext>[^\./]+)')
+    pattern = pattern.replace('{lang}', '(?P<lang>{0})'.format('|'.join(config['TRANSLATIONS'].keys())))
+    m = re.match(pattern, path)
+    if m and all(m.groups()):  # It's a translated path
+        p, e, l = m.group('path'), m.group('ext'), m.group('lang')
+        if l == lang:  # Nothing to do
+            return path
+        elif lang == config['DEFAULT_LANG']:  # Return untranslated path
+            return '{0}.{1}'.format(p, e)
+        else:  # Change lang and return
+            return config['TRANSLATIONS_PATTERN'].format(path=p, ext=e, lang=lang)
+    else:
+        # It's a untranslated path, assume it's path.ext
+        p, e = os.path.splitext(path)
+        e = e[1:]  # No initial dot
+        if lang == config['DEFAULT_LANG']:  # Nothing to do
+            return path
+        else:  # Change lang and return
+            return config['TRANSLATIONS_PATTERN'].format(path=p, ext=e, lang=lang)
+
+
+def write_metadata(data):
+    """Write metadata."""
+    order = ('title', 'slug', 'date', 'tags', 'link', 'description', 'type')
+    f = '.. {0}: {1}'
+    meta = []
+    for k in order:
+        try:
+            meta.append(f.format(k, data.pop(k)))
+        except KeyError:
+            pass
+
+    # Leftover metadata (user-specified/non-default).
+    for k, v in data.items():
+        meta.append(f.format(k, v))
+
+    meta.append('')
+
+    return '\n'.join(meta)

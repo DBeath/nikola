@@ -4,6 +4,7 @@
 # 
 # Translators:
 # Translators:
+# Translators:
 # David Paleino <d.paleino@gmail.com>, 2013
 # David Paleino <d.paleino@gmail.com>, 2013
 msgid ""
@@ -11,7 +12,7 @@ msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:11+0000\n"
+"PO-Revision-Date: 2014-04-17 14:46+0000\n"
 "Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
 "Language-Team: Esperanto (http://www.transifex.com/projects/p/nikola/language/eo/)\n"
 "MIME-Version: 1.0\n"
@@ -35,6 +36,9 @@ msgstr "Kategorioj"
 msgid "Tags and Categories"
 msgstr "Etikedoj kaj Kategorioj"
 
+msgid "Comments"
+msgstr ""
+
 msgid "Read more"
 msgstr "Legu plu"
 
@@ -44,8 +48,11 @@ msgstr "Artikoloj pri %s"
 msgid "Next post"
 msgstr "Venonta artikolo"
 
-msgid "old posts page %d"
+msgid "old posts, page %d"
 msgstr "paĝo de malnovaj artikoloj %d"
+
+msgid "page %d"
+msgstr "paĝo %d"
 
 msgid "Source"
 msgstr "Fonto"
@@ -67,6 +74,9 @@ msgstr "Antaŭa artikolo"
 msgid "Also available in:"
 msgstr "Ankaŭ disponebla en:"
 
+msgid "Languages:"
+msgstr ""
+
 msgid "Original site"
 msgstr "Originala interretejo"
 
@@ -76,8 +86,23 @@ msgstr "Pli malnovaj artikoloj"
 msgid "Archive"
 msgstr "Arĥivo"
 
+msgid "Publication date"
+msgstr ""
+
 msgid "Posted:"
 msgstr "Skribita:"
 
 msgid "Posts for {month} {year}"
 msgstr "Artikoloj skribitaj en {month} {year}"
+
+msgid "Nothing found."
+msgstr ""
+
+msgid "No posts found."
+msgstr ""
+
+msgid "RSS feed"
+msgstr ""
+
+msgid "%d min remaining to read"
+msgstr ""

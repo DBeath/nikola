@@ -15,16 +15,10 @@ import unittest
 from os import path
 
 from nikola.plugins.compile.markdown import CompileMarkdown
+from .base import BaseTestCase, FakeSite
 
 
-class FakeSite(object):
-    config = {
-        "MARKDOWN_EXTENSIONS": ['fenced_code', 'codehilite'],
-        "LOGGING_HANDLERS": {'stderr': {'loglevel': 'WARNING', 'bubble': True}}
-    }
-
-
-class CompileMarkdownTests(unittest.TestCase):
+class CompileMarkdownTests(BaseTestCase):
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp()
         self.input_path = path.join(self.tmp_dir, 'input.markdown')

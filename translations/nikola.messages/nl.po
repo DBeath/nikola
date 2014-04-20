@@ -4,15 +4,17 @@
 # 
 # Translators:
 # Translators:
+# Translators:
+# Translators:
 # Joes <joes@staalkemade.net>, 2013
-# Joes <joes@staalkemade.net>, 2013
+# Joes <joes@staalkemade.net>, 2013-2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:11+0000\n"
-"Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
+"PO-Revision-Date: 2014-04-19 21:18+0000\n"
+"Last-Translator: Joes <joes@staalkemade.net>\n"
 "Language-Team: Dutch (http://www.transifex.com/projects/p/nikola/language/nl/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -35,6 +37,9 @@ msgstr "Categorieën"
 msgid "Tags and Categories"
 msgstr "Tags en Categorieën"
 
+msgid "Comments"
+msgstr "Commentaar"
+
 msgid "Read more"
 msgstr "Lees verder"
 
@@ -44,8 +49,11 @@ msgstr "Berichten over %s"
 msgid "Next post"
 msgstr "Volgend bericht"
 
-msgid "old posts page %d"
-msgstr "oude berichten pagina %d"
+msgid "old posts, page %d"
+msgstr "oude berichten, pagina %d"
+
+msgid "page %d"
+msgstr "pagina %d"
 
 msgid "Source"
 msgstr "Bron"
@@ -67,6 +75,9 @@ msgstr "Vorig bericht"
 msgid "Also available in:"
 msgstr "Ook beschikbaar in:"
 
+msgid "Languages:"
+msgstr "Talen:"
+
 msgid "Original site"
 msgstr "Originele site"
 
@@ -76,8 +87,23 @@ msgstr "Oudere berichten"
 msgid "Archive"
 msgstr "Archief"
 
+msgid "Publication date"
+msgstr "Publicatiedatum"
+
 msgid "Posted:"
 msgstr "Geplaatst:"
 
 msgid "Posts for {month} {year}"
 msgstr "Berichten voor {month} {year}"
+
+msgid "Nothing found."
+msgstr "Niets gevonden."
+
+msgid "No posts found."
+msgstr "Geen berichten gevonden."
+
+msgid "RSS feed"
+msgstr "RSS-feed"
+
+msgid "%d min remaining to read"
+msgstr "nog %d min leestijd "

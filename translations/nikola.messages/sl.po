@@ -4,15 +4,17 @@
 # 
 # Translators:
 # Translators:
+# Translators:
+# Translators:
 # Venčeslav Vezjak <vezjakv@gmail.com>, 2013
-# Venčeslav Vezjak <vezjakv@gmail.com>, 2013
+# Venčeslav Vezjak <vezjakv@gmail.com>, 2013-2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:11+0000\n"
-"Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
+"PO-Revision-Date: 2014-04-18 08:02+0000\n"
+"Last-Translator: Venčeslav Vezjak <vezjakv@gmail.com>\n"
 "Language-Team: Slovenian (http://www.transifex.com/projects/p/nikola/language/sl/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -35,6 +37,9 @@ msgstr "Kategorije"
 msgid "Tags and Categories"
 msgstr "Značke in kategorije"
 
+msgid "Comments"
+msgstr "Komentarji"
+
 msgid "Read more"
 msgstr "Več o tem"
 
@@ -44,8 +49,11 @@ msgstr "Objave o %s"
 msgid "Next post"
 msgstr "Naslednja objava"
 
-msgid "old posts page %d"
+msgid "old posts, page %d"
 msgstr "stare objave, stran %d"
+
+msgid "page %d"
+msgstr "stran %d"
 
 msgid "Source"
 msgstr "Izvor"
@@ -67,6 +75,9 @@ msgstr "Prejšnja objava"
 msgid "Also available in:"
 msgstr "Na voljo tudi v:"
 
+msgid "Languages:"
+msgstr "Jeziki:"
+
 msgid "Original site"
 msgstr "Izvorna spletna stran"
 
@@ -76,8 +87,23 @@ msgstr "Starejše objave"
 msgid "Archive"
 msgstr "Arhiv"
 
+msgid "Publication date"
+msgstr "Datum objave"
+
 msgid "Posted:"
 msgstr "Objavljeno:"
 
 msgid "Posts for {month} {year}"
 msgstr "Objave za {month} {year}"
+
+msgid "Nothing found."
+msgstr "Brez zadetkov."
+
+msgid "No posts found."
+msgstr "Ni najdenih objav."
+
+msgid "RSS feed"
+msgstr "vir RSS"
+
+msgid "%d min remaining to read"
+msgstr "za prebrati preostalo še %d min"

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -29,6 +29,7 @@ import codecs
 import csv
 import datetime
 import os
+from pkg_resources import resource_filename
 
 try:
     from urlparse import urlparse
@@ -48,8 +49,8 @@ class ImportMixin(object):
 
     name = "import_mixin"
     needs_config = False
-    doc_usage = "[options] wordpress_export_file"
-    doc_purpose = "import a wordpress dump."
+    doc_usage = "[options] export_file"
+    doc_purpose = "import a dump from a different engine."
     cmd_options = [
         {
             'name': 'output_folder',
@@ -89,13 +90,13 @@ class ImportMixin(object):
 
     def generate_base_site(self):
         if not os.path.exists(self.output_folder):
-            os.system('nikola init ' + self.output_folder)
+            os.system('nikola init -q ' + self.output_folder)
         else:
             self.import_into_existing_site = True
             utils.LOGGER.notice('The folder {0} already exists - assuming that this is a '
-                                'already existing nikola site.'.format(self.output_folder))
+                                'already existing Nikola site.'.format(self.output_folder))
 
-        filename = os.path.join(os.path.dirname(utils.__file__), 'conf.py.in')
+        filename = resource_filename('nikola', 'conf.py.in')
         # The 'strict_undefined=True' will give the missing symbol name if any,
         # (ex: NameError: 'THEME' is not defined )
         # for other errors from mako/runtime.py, you can add format_extensions=True ,
@@ -151,7 +152,7 @@ class ImportMixin(object):
                 time=datetime.datetime.now().strftime('%Y%m%d_%H%M%S'),
                 name=self.name)
         config_output_path = os.path.join(self.output_folder, filename)
-        utils.LOGGER.notice('Configuration will be written to: {0}'.format(config_output_path))
+        utils.LOGGER.info('Configuration will be written to: {0}'.format(config_output_path))
 
         return config_output_path
 

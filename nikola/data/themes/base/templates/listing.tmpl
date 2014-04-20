@@ -3,7 +3,8 @@
 <%namespace name="ui" file="crumbs.tmpl" import="bar"/>
 <%block name="content">
 ${ui.bar(crumbs)}
-<ul class="unstyled">
+%if folders or files:
+<ul>
 % for name in folders:
     <li><a href="${name}"><i class="icon-folder-open"></i> ${name}</a>
 % endfor
@@ -11,6 +12,7 @@ ${ui.bar(crumbs)}
     <li><a href="${name}.html"><i class="icon-file"></i> ${name}</a>
 % endfor
 </ul>
+%endif
 % if code:
     ${code}
 % endif

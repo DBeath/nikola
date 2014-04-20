@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -37,12 +37,15 @@ try:
 except ImportError:
     from urllib.parse import urljoin  # NOQA
 
+import dateutil.tz
 import lxml.html
+import natsort
 try:
     import pyphen
 except ImportError:
     pyphen = None
-import pytz
+
+from math import ceil
 
 # for tearDown with _reload we cannot use 'from import' to get forLocaleBorg
 import nikola.utils
@@ -51,17 +54,18 @@ from .utils import (
     current_time,
     Functionary,
     LOGGER,
+    LocaleBorg,
     slugify,
     to_datetime,
     unicode_str,
     demote_headers,
+    get_translation_candidate,
 )
 from .rc4 import rc4
 
 __all__ = ['Post']
 
 TEASER_REGEXP = re.compile('<!--\s*TEASER_END(:(.+))?\s*-->', re.IGNORECASE)
-READ_MORE_LINK = '<p class="more"><a href="{link}">{read_more}…</a></p>'
 
 
 class Post(object):
@@ -88,17 +92,17 @@ class Post(object):
         self.compiler = compiler
         self.compile_html = self.compiler.compile_html
         self.demote_headers = self.compiler.demote_headers and self.config['DEMOTE_HEADERS']
-        tzinfo = pytz.timezone(self.config['TIMEZONE'])
+        tzinfo = self.config['__tzinfo__']
         if self.config['FUTURE_IS_NOW']:
             self.current_time = None
         else:
-            self.current_time = current_time(tzinfo)
+            self.current_time = current_time()
         self.translated_to = set([])
         self._prev_post = None
         self._next_post = None
         self.base_url = self.config['BASE_URL']
         self.is_draft = False
-        self.is_retired = False
+        self.is_private = False
         self.is_mathjax = False
         self.strip_indexes = self.config['STRIP_INDEXES']
         self.index_file = self.config['INDEX_FILE']
@@ -114,11 +118,14 @@ class Post(object):
         self.translations = self.config['TRANSLATIONS']
         self.default_lang = self.config['DEFAULT_LANG']
         self.messages = messages
-        self.skip_untranslated = self.config['HIDE_UNTRANSLATED_POSTS']
+        self.skip_untranslated = not self.config['SHOW_UNTRANSLATED_POSTS']
         self._template_name = template_name
         self.is_two_file = True
         self.hyphenate = self.config['HYPHENATE']
         self._reading_time = None
+        self._remaining_reading_time = None
+        self._paragraph_count = None
+        self._remaining_paragraph_count = None
 
         default_metadata = get_meta(self, self.config['FILE_METADATA_REGEXP'])
 
@@ -127,16 +134,13 @@ class Post(object):
 
         # Load internationalized metadata
         for lang in self.translations:
+            if os.path.isfile(get_translation_candidate(self.config, self.source_path, lang)):
+                self.translated_to.add(lang)
             if lang != self.default_lang:
-                if os.path.isfile(self.source_path + "." + lang):
-                    self.translated_to.add(lang)
-
                 meta = defaultdict(lambda: '')
                 meta.update(default_metadata)
                 meta.update(get_meta(self, self.config['FILE_METADATA_REGEXP'], lang))
                 self.meta[lang] = meta
-            elif os.path.isfile(self.source_path):
-                self.translated_to.add(self.default_lang)
 
         if not self.is_translation_available(self.default_lang):
             # Special case! (Issue #373)
@@ -146,8 +150,11 @@ class Post(object):
 
         if 'date' not in default_metadata and not use_in_feeds:
             # For stories we don't *really* need a date
-            default_metadata['date'] = datetime.datetime.utcfromtimestamp(
-                os.stat(self.source_path).st_ctime).replace(tzinfo=pytz.UTC).astimezone(tzinfo)
+            if self.config['__invariant__']:
+                default_metadata['date'] = datetime.datetime(2013, 12, 31, 23, 59, 59, tzinfo=tzinfo)
+            else:
+                default_metadata['date'] = datetime.datetime.utcfromtimestamp(
+                    os.stat(self.source_path).st_ctime).replace(tzinfo=dateutil.tz.tzutc()).astimezone(tzinfo)
 
         if 'title' not in default_metadata or 'slug' not in default_metadata \
                 or 'date' not in default_metadata:
@@ -158,35 +165,51 @@ class Post(object):
                                         default_metadata.get('date', None),
                                         source_path))
 
+        if 'type' not in default_metadata:
+            # default value is 'text'
+            default_metadata['type'] = 'text'
+
         # If time zone is set, build localized datetime.
         self.date = to_datetime(self.meta[self.default_lang]['date'], tzinfo)
 
         self.publish_later = False if self.current_time is None else self.date >= self.current_time
 
         is_draft = False
-        is_retired = False
+        is_private = False
         self._tags = {}
         for lang in self.translated_to:
-            self._tags[lang] = [x.strip() for x in self.meta[lang]['tags'].split(',')]
+            self._tags[lang] = natsort.natsorted(
+                list(set([x.strip() for x in self.meta[lang]['tags'].split(',')])))
             self._tags[lang] = [t for t in self._tags[lang] if t]
             if 'draft' in self._tags[lang]:
                 is_draft = True
+                LOGGER.debug('The post "{0}" is a draft.'.format(self.source_path))
                 self._tags[lang].remove('draft')
+
+            # TODO: remove in v8
             if 'retired' in self._tags[lang]:
-                is_retired = True
+                is_private = True
+                LOGGER.warning('The "retired" tag in post "{0}" is now deprecated and will be removed in v8.  Use "private" instead.'.format(self.source_path))
                 self._tags[lang].remove('retired')
+            # end remove in v8
+
             if 'private' in self._tags[lang]:
-                is_retired = True
+                is_private = True
+                LOGGER.debug('The post "{0}" is private.'.format(self.source_path))
                 self._tags[lang].remove('private')
 
         # While draft comes from the tags, it's not really a tag
         self.is_draft = is_draft
-        self.is_retired = is_retired
-        self.use_in_feeds = use_in_feeds and not is_draft and not is_retired \
+        self.is_private = is_private
+        self.is_post = use_in_feeds
+        self.use_in_feeds = use_in_feeds and not is_draft and not is_private \
             and not self.publish_later
 
         # If mathjax is a tag, then enable mathjax rendering support
         self.is_mathjax = 'mathjax' in self.tags
+
+    def __repr__(self):
+        return '<Post: {0}>'.format(self.source_path)
 
     def _has_pretty_url(self, lang):
         if self.pretty_urls and \
@@ -268,6 +291,21 @@ class Post(object):
             lang = nikola.utils.LocaleBorg().current_lang
         return self.meta[lang]['title']
 
+    def author(self, lang=None):
+        """Return localized author or BLOG_AUTHOR if unspecified.
+
+        If lang is not specified, it defaults to the current language from
+        templates, as set in LocaleBorg.
+        """
+        if lang is None:
+            lang = nikola.utils.LocaleBorg().current_lang
+        if self.meta[lang]['author']:
+            author = self.meta[lang]['author']
+        else:
+            author = self.config['BLOG_AUTHOR'](lang)
+
+        return author
+
     def description(self, lang=None):
         """Return localized description."""
         if lang is None:
@@ -280,8 +318,7 @@ class Post(object):
         if self.default_lang in self.translated_to:
             deps.append(self.base_path)
         if lang != self.default_lang:
-            deps += [self.base_path + "." + lang]
-        deps += self.fragment_deps(lang)
+            deps += [get_translation_candidate(self.config, self.base_path, lang)]
         return deps
 
     def compile(self, lang):
@@ -295,20 +332,30 @@ class Post(object):
             with codecs.open(path, 'wb+', 'utf8') as outf:
                 outf.write(data)
 
-        self.READ_MORE_LINK = self.config['READ_MORE_LINK']
         dest = self.translated_base_path(lang)
-        if not self.is_translation_available(lang) and self.config['HIDE_UNTRANSLATED_POSTS']:
+        if not self.is_translation_available(lang) and not self.config['SHOW_UNTRANSLATED_POSTS']:
             return
-        else:
-            self.compile_html(
-                self.translated_source_path(lang),
-                dest,
-                self.is_two_file),
+        # Set the language to the right thing
+        LocaleBorg().set_locale(lang)
+        self.compile_html(
+            self.translated_source_path(lang),
+            dest,
+            self.is_two_file),
         if self.meta('password'):
             wrap_encrypt(dest, self.meta('password'))
         if self.publish_later:
             LOGGER.notice('{0} is scheduled to be published in the future ({1})'.format(
                 self.source_path, self.date))
+
+    def extra_deps(self):
+        """get extra depepencies from .dep files
+        This file is created by ReST
+        """
+        dep_path = self.base_path + '.dep'
+        if os.path.isfile(dep_path):
+            with codecs.open(dep_path, 'rb+', 'utf8') as depf:
+                return [l.strip() for l in depf.readlines()]
+        return []
 
     def fragment_deps(self, lang):
         """Return a list of dependencies to build this post's fragment."""
@@ -317,13 +364,10 @@ class Post(object):
             deps.append(self.source_path)
         if os.path.isfile(self.metadata_path):
             deps.append(self.metadata_path)
-        dep_path = self.base_path + '.dep'
-        if os.path.isfile(dep_path):
-            with codecs.open(dep_path, 'rb+', 'utf8') as depf:
-                deps.extend([l.strip() for l in depf.readlines()])
+        deps.extend(self.extra_deps())
         lang_deps = []
         if lang != self.default_lang:
-            lang_deps = [d + "." + lang for d in deps]
+            lang_deps = [get_translation_candidate(self.config, d, lang) for d in deps]
             deps += lang_deps
         return [d for d in deps if os.path.exists(d)]
 
@@ -337,18 +381,15 @@ class Post(object):
             if lang == self.default_lang:
                 return self.source_path
             else:
-                return '.'.join((self.source_path, lang))
+                return get_translation_candidate(self.config, self.source_path, lang)
         elif lang != self.default_lang:
             return self.source_path
         else:
-            return '.'.join((self.source_path, sorted(self.translated_to)[0]))
+            return get_translation_candidate(self.config, self.source_path, sorted(self.translated_to)[0])
 
     def translated_base_path(self, lang):
         """Return path to the translation's base_path file."""
-        if lang == self.default_lang:
-            return self.base_path
-        else:
-            return '.'.join((self.base_path, lang))
+        return get_translation_candidate(self.config, self.base_path, lang)
 
     def _translated_file_path(self, lang):
         """Return path to the translation's file, or to the original."""
@@ -356,17 +397,19 @@ class Post(object):
             if lang == self.default_lang:
                 return self.base_path
             else:
-                return '.'.join((self.base_path, lang))
+                return get_translation_candidate(self.config, self.base_path, lang)
         elif lang != self.default_lang:
             return self.base_path
         else:
-            return '.'.join((self.base_path, sorted(self.translated_to)[0]))
+            return get_translation_candidate(self.config, self.base_path, sorted(self.translated_to)[0])
 
-    def text(self, lang=None, teaser_only=False, strip_html=False, really_absolute=False):
+    def text(self, lang=None, teaser_only=False, strip_html=False, show_read_more_link=True, rss_read_more_link=False):
         """Read the post file for that language and return its contents.
 
         teaser_only=True breaks at the teaser marker and returns only the teaser.
         strip_html=True removes HTML tags
+        show_read_more_link=False does not add the Read more... link
+        rss_read_more_link=True uses RSS_READ_MORE_LINK instead of INDEX_READ_MORE_LINK
         lang=None uses the last used to set locale
 
         All links in the returned HTML will be relative.
@@ -386,7 +429,7 @@ class Post(object):
                 return ""
             # let other errors raise
             raise(e)
-        base_url = self.permalink(lang=lang, absolute=really_absolute)
+        base_url = self.permalink(lang=lang)
         document.make_links_absolute(base_url)
 
         if self.hyphenate:
@@ -406,15 +449,21 @@ class Post(object):
         if teaser_only:
             teaser = TEASER_REGEXP.split(data)[0]
             if teaser != data:
-                if not strip_html:
+                if not strip_html and show_read_more_link:
                     if TEASER_REGEXP.search(data).groups()[-1]:
                         teaser += '<p class="more"><a href="{0}">{1}</a></p>'.format(
-                            self.permalink(lang, absolute=really_absolute),
+                            self.permalink(lang),
                             TEASER_REGEXP.search(data).groups()[-1])
                     else:
-                        teaser += READ_MORE_LINK.format(
-                            link=self.permalink(lang, absolute=really_absolute),
-                            read_more=self.messages[lang]["Read more"])
+                        l = self.config['RSS_READ_MORE_LINK'](lang) if rss_read_more_link else self.config['INDEX_READ_MORE_LINK'](lang)
+                        teaser += l.format(
+                            link=self.permalink(lang),
+                            read_more=self.messages[lang]["Read more"],
+                            min_remaining_read=self.messages[lang]["%d min remaining to read"] % (self.remaining_reading_time),
+                            reading_time=self.reading_time,
+                            remaining_reading_time=self.remaining_reading_time,
+                            paragraph_count=self.paragraph_count,
+                            remaining_paragraph_count=self.remaining_paragraph_count)
                 # This closes all open tags and sanitizes the broken HTML
                 document = lxml.html.fromstring(teaser)
                 data = lxml.html.tostring(document, encoding='unicode')
@@ -440,14 +489,62 @@ class Post(object):
 
     @property
     def reading_time(self):
-        """Reading time based on length of text.
-        """
+        """Reading time based on length of text."""
         if self._reading_time is None:
             text = self.text(strip_html=True)
-            words_per_minute = 180
+            words_per_minute = 220
             words = len(text.split())
-            self._reading_time = int(round(words / words_per_minute)) or 1
+            self._reading_time = int(ceil(words / words_per_minute)) or 1
         return self._reading_time
+
+    @property
+    def remaining_reading_time(self):
+        """Remaining reading time based on length of text (does not include teaser)."""
+        if self._remaining_reading_time is None:
+            text = self.text(teaser_only=True, strip_html=True)
+            words_per_minute = 220
+            words = len(text.split())
+            self._remaining_reading_time = self.reading_time - int(ceil(words / words_per_minute)) or 1
+        return self._remaining_reading_time
+
+    @property
+    def paragraph_count(self):
+        """Return the paragraph count for this post."""
+        if self._paragraph_count is None:
+            # duplicated with Post.text()
+            lang = nikola.utils.LocaleBorg().current_lang
+            file_name = self._translated_file_path(lang)
+            with codecs.open(file_name, "r", "utf8") as post_file:
+                data = post_file.read().strip()
+            try:
+                document = lxml.html.fragment_fromstring(data, "body")
+            except lxml.etree.ParserError as e:
+                # if we don't catch this, it breaks later (Issue #374)
+                if str(e) == "Document is empty":
+                    return ""
+                # let other errors raise
+                raise(e)
+
+            # output is a float, for no real reason at all
+            self._paragraph_count = int(document.xpath('count(//p)'))
+        return self._paragraph_count
+
+    @property
+    def remaining_paragraph_count(self):
+        """Return the remaining paragraph count for this post (does not include teaser)."""
+        if self._remaining_paragraph_count is None:
+            try:
+                # Just asking self.text() is easier here.
+                document = lxml.html.fragment_fromstring(self.text(teaser_only=True, show_read_more_link=False), "body")
+            except lxml.etree.ParserError as e:
+                # if we don't catch this, it breaks later (Issue #374)
+                if str(e) == "Document is empty":
+                    return ""
+                # let other errors raise
+                raise(e)
+
+            self._remaining_paragraph_count = self.paragraph_count - int(document.xpath('count(//p)'))
+        return self._remaining_paragraph_count
 
     def source_link(self, lang=None):
         """Return absolute link to the post's source."""
@@ -487,7 +584,7 @@ class Post(object):
         pieces = [_f for _f in pieces if _f and _f != '.']
         link = '/' + '/'.join(pieces)
         if absolute:
-            link = urljoin(self.base_url, link)
+            link = urljoin(self.base_url, link[1:])
         index_len = len(self.index_file)
         if self.strip_indexes and link[-(1 + index_len):] == '/' + self.index_file:
             return link[:-index_len]
@@ -534,11 +631,13 @@ def _get_metadata_from_filename_by_regex(filename, metadata_regexp):
     return meta
 
 
-def get_metadata_from_file(source_path, lang=None):
+def get_metadata_from_file(source_path, config=None, lang=None):
     """Extracts metadata from the file itself, by parsing contents."""
     try:
-        if lang:
-            source_path = "{0}.{1}".format(source_path, lang)
+        if lang and config:
+            source_path = get_translation_candidate(config, source_path, lang)
+        elif lang:
+            source_path += '.' + lang
         with codecs.open(source_path, "r", "utf8") as meta_file:
             meta_data = [x.strip() for x in meta_file.readlines()]
         return _get_metadata_from_file(meta_data)
@@ -599,41 +698,59 @@ def _get_metadata_from_file(meta_data):
     return meta
 
 
-def get_metadata_from_meta_file(path, lang=None):
+def get_metadata_from_meta_file(path, config=None, lang=None):
     """Takes a post path, and gets data from a matching .meta file."""
     meta_path = os.path.splitext(path)[0] + '.meta'
-    if lang:
+    if lang and config:
+        meta_path = get_translation_candidate(config, meta_path, lang)
+    elif lang:
         meta_path += '.' + lang
     if os.path.isfile(meta_path):
         with codecs.open(meta_path, "r", "utf8") as meta_file:
             meta_data = meta_file.readlines()
-        while len(meta_data) < 6:
-            meta_data.append("")
-        (title, slug, date, tags, link, description) = [
-            x.strip() for x in meta_data][:6]
 
-        meta = {}
+        # Detect new-style metadata.
+        newstyleregexp = re.compile(r'\.\. .*?: .*')
+        newstylemeta = False
+        for l in meta_data:
+            if l.strip():
+                if re.match(newstyleregexp, l):
+                    newstylemeta = True
 
-        if title:
-            meta['title'] = title
-        if slug:
-            meta['slug'] = slug
-        if date:
-            meta['date'] = date
-        if tags:
-            meta['tags'] = tags
-        if link:
-            meta['link'] = link
-        if description:
-            meta['description'] = description
+        if newstylemeta:
+            # New-style metadata is basically the same as reading metadata from
+            # a 1-file post.
+            return get_metadata_from_file(path, config, lang)
+        else:
+            while len(meta_data) < 7:
+                meta_data.append("")
+            (title, slug, date, tags, link, description, _type) = [
+                x.strip() for x in meta_data][:7]
 
-        return meta
+            meta = {}
+
+            if title:
+                meta['title'] = title
+            if slug:
+                meta['slug'] = slug
+            if date:
+                meta['date'] = date
+            if tags:
+                meta['tags'] = tags
+            if link:
+                meta['link'] = link
+            if description:
+                meta['description'] = description
+            if _type:
+                meta['type'] = _type
+
+            return meta
 
     elif lang:
         # Metadata file doesn't exist, but not default language,
         # So, if default language metadata exists, return that.
         # This makes the 2-file format detection more reliable (Issue #525)
-        return get_metadata_from_meta_file(path, lang=None)
+        return get_metadata_from_meta_file(path, config, lang=None)
     else:
         return {}
 
@@ -648,7 +765,12 @@ def get_meta(post, file_metadata_regexp=None, lang=None):
     """
     meta = defaultdict(lambda: '')
 
-    meta.update(get_metadata_from_meta_file(post.metadata_path, lang))
+    try:
+        config = post.config
+    except AttributeError:
+        config = None
+
+    meta.update(get_metadata_from_meta_file(post.metadata_path, config, lang))
 
     if meta:
         return meta
@@ -658,7 +780,7 @@ def get_meta(post, file_metadata_regexp=None, lang=None):
         meta.update(_get_metadata_from_filename_by_regex(post.source_path,
                                                          file_metadata_regexp))
 
-    meta.update(get_metadata_from_file(post.source_path, lang))
+    meta.update(get_metadata_from_file(post.source_path, config, lang))
 
     if lang is None:
         # Only perform these checks for the default language

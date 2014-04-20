@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,8 +26,10 @@
 
 """Utility functions to help you run filters on files."""
 
+from .utils import req_missing
 from functools import wraps
 import os
+import codecs
 import re
 import shutil
 import subprocess
@@ -37,13 +39,13 @@ import shlex
 try:
     import typogrify.filters as typo
 except ImportError:
-    typo = None
+    typo = None  # NOQA
 
 
-def apply_to_file(f):
-    """Takes a function f that transforms a data argument, and returns
+def apply_to_binary_file(f):
+    """Take a function f that transforms a data argument, and returns
     a function that takes a filename and applies f to the contents,
-    in place."""
+    in place.  Reads files in binary mode."""
     @wraps(f)
     def f_in_file(fname):
         with open(fname, 'rb') as inf:
@@ -55,15 +57,30 @@ def apply_to_file(f):
     return f_in_file
 
 
+def apply_to_text_file(f):
+    """Take a function f that transforms a data argument, and returns
+    a function that takes a filename and applies f to the contents,
+    in place.  Reads files in UTF-8."""
+    @wraps(f)
+    def f_in_file(fname):
+        with codecs.open(fname, 'r', 'utf-8') as inf:
+            data = inf.read()
+        data = f(data)
+        with codecs.open(fname, 'w+', 'utf-8') as outf:
+            outf.write(data)
+
+    return f_in_file
+
+
 def list_replace(the_list, find, replacement):
-    "Replaces all occurrences of ``find`` with ``replacement`` in ``the_list``"
+    "Replace all occurrences of ``find`` with ``replacement`` in ``the_list``"
     for i, v in enumerate(the_list):
         if v == find:
             the_list[i] = replacement
 
 
 def runinplace(command, infile):
-    """Runs a command in-place on a file.
+    """Run a command in-place on a file.
 
     command is a string of the form: "commandname %1 %2" and
     it will be execed with infile as %1 and a temporary file
@@ -102,7 +119,21 @@ def runinplace(command, infile):
 
 
 def yui_compressor(infile):
-    return runinplace(r'yui-compressor --nomunge %1 -o %2', infile)
+    yuicompressor = False
+    try:
+        subprocess.call('yui-compressor', stdout=open(os.devnull, 'w'), stderr=open(os.devnull, 'w'))
+        yuicompressor = 'yui-compressor'
+    except Exception:
+        pass
+    if not yuicompressor:
+        try:
+            subprocess.call('yuicompressor', stdout=open(os.devnull, 'w'), stderr=open(os.devnull, 'w'))
+            yuicompressor = 'yuicompressor'
+        except:
+            raise Exception("yui-compressor is not installed.")
+            return False
+
+    return runinplace(r'{} --nomunge %1 -o %2'.format(yuicompressor), infile)
 
 
 def optipng(infile):
@@ -114,7 +145,7 @@ def jpegoptim(infile):
 
 
 def tidy(inplace):
-    # Goggle site verifcation files are no HTML
+    # Google site verifcation files are not HTML
     if re.match(r"google[a-f0-9]+.html", os.path.basename(inplace)) \
             and open(inplace).readline().startswith(
                 "google-site-verification:"):
@@ -157,15 +188,15 @@ def tidy(inplace):
                 assert False, line
 
 
-@apply_to_file
+@apply_to_text_file
 def typogrify(data):
-    global typogrify_filter
     if typo is None:
-        raise Exception("To use the typogrify filter, you need to install typogrify.")
+        req_missing(['typogrify', 'use the typogrify filter'])
+
     data = typo.amp(data)
     data = typo.widont(data)
     data = typo.smartypants(data)
     # Disabled because of typogrify bug where it breaks <title>
-    #data = typo.caps(data)
+    # data = typo.caps(data)
     data = typo.initial_quotes(data)
     return data

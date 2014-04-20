@@ -4,16 +4,18 @@
 # 
 # Translators:
 # Translators:
+# Translators:
 # Alessandro Pisa <alessandro.pisa@gmail.com>, 2013
 # David Paleino <d.paleino@gmail.com>, 2013
 # ralsina <ralsina@netmanagers.com.ar>, 2013
 # ralsina <ralsina@netmanagers.com.ar>, 2013
+# Stefano Karapetsas <stefano@karapetsas.com>, 2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:11+0000\n"
+"PO-Revision-Date: 2014-04-17 14:46+0000\n"
 "Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
 "Language-Team: Italian (http://www.transifex.com/projects/p/nikola/language/it/)\n"
 "MIME-Version: 1.0\n"
@@ -37,6 +39,9 @@ msgstr "Categorie"
 msgid "Tags and Categories"
 msgstr "Tags e Categorie"
 
+msgid "Comments"
+msgstr ""
+
 msgid "Read more"
 msgstr "Espandi"
 
@@ -46,8 +51,11 @@ msgstr "Articoli su %s"
 msgid "Next post"
 msgstr "Articolo successivo"
 
-msgid "old posts page %d"
+msgid "old posts, page %d"
 msgstr "pagina dei vecchi articoli %d"
+
+msgid "page %d"
+msgstr "pagina %d"
 
 msgid "Source"
 msgstr "Sorgente"
@@ -69,6 +77,9 @@ msgstr "Articolo precedente"
 msgid "Also available in:"
 msgstr "Anche disponibile in:"
 
+msgid "Languages:"
+msgstr ""
+
 msgid "Original site"
 msgstr "Sito originale"
 
@@ -78,8 +89,23 @@ msgstr "Articoli precedenti"
 msgid "Archive"
 msgstr "Archivio"
 
+msgid "Publication date"
+msgstr ""
+
 msgid "Posted:"
 msgstr "Pubblicato:"
 
 msgid "Posts for {month} {year}"
 msgstr "Articoli per {month} {year}"
+
+msgid "Nothing found."
+msgstr "Non trovato."
+
+msgid "No posts found."
+msgstr "Nessun articolo trovato."
+
+msgid "RSS feed"
+msgstr ""
+
+msgid "%d min remaining to read"
+msgstr ""

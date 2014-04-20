@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -27,8 +27,15 @@
 """Markdown Extension for Nikola-specific post-processing"""
 from __future__ import unicode_literals
 import re
-from markdown.postprocessors import Postprocessor
-from markdown.extensions import Extension
+try:
+    from markdown.postprocessors import Postprocessor
+    from markdown.extensions import Extension
+except ImportError:
+    # No need to catch this, if you try to use this without Markdown,
+    # the markdown compiler will fail first
+    Postprocessor = Extension = object
+
+from nikola.plugin_categories import MarkdownExtension
 
 
 class NikolaPostProcessor(Postprocessor):
@@ -43,7 +50,7 @@ class NikolaPostProcessor(Postprocessor):
         return output
 
 
-class NikolaExtension(Extension):
+class NikolaExtension(MarkdownExtension, Extension):
     def extendMarkdown(self, md, md_globals):
         pp = NikolaPostProcessor()
         md.postprocessors.add('nikola_post_processor', pp, '_end')

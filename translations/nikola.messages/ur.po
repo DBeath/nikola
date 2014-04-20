@@ -4,15 +4,18 @@
 # 
 # Translators:
 # Translators:
+# Translators:
+# seanpue <a@seanpue.com>, 2014
 # saadat, 2013
+# saadat <nastaliq@gmail.com>, 2013
 # saadat <nastaliq@gmail.com>, 2013
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:24+0000\n"
-"Last-Translator: saadat <nastaliq@gmail.com>\n"
+"PO-Revision-Date: 2014-04-17 14:46+0000\n"
+"Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
 "Language-Team: Urdu (http://www.transifex.com/projects/p/nikola/language/ur/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -35,6 +38,9 @@ msgstr "زمرے"
 msgid "Tags and Categories"
 msgstr "ٹیگز اور زمرے"
 
+msgid "Comments"
+msgstr ""
+
 msgid "Read more"
 msgstr "مزید پڑھیے"
 
@@ -44,8 +50,11 @@ msgstr "%s کے بارے میں تحاریر"
 msgid "Next post"
 msgstr "اگلی تحریر"
 
-msgid "old posts page %d"
+msgid "old posts, page %d"
 msgstr "پرانی تحاریر صفحہ %d"
+
+msgid "page %d"
+msgstr "صفحہ %d"
 
 msgid "Source"
 msgstr "سورس"
@@ -67,6 +76,9 @@ msgstr "پچھلی تحریر"
 msgid "Also available in:"
 msgstr "ان زبانوں میں بھی دستیاب:"
 
+msgid "Languages:"
+msgstr ""
+
 msgid "Original site"
 msgstr "اصلی سائٹ"
 
@@ -76,8 +88,23 @@ msgstr "پرانی تحاریر"
 msgid "Archive"
 msgstr "آرکائیو"
 
+msgid "Publication date"
+msgstr ""
+
 msgid "Posted:"
 msgstr "اشاعت:"
 
 msgid "Posts for {month} {year}"
 msgstr "{month} {year} کی تحاریر"
+
+msgid "Nothing found."
+msgstr ""
+
+msgid "No posts found."
+msgstr ""
+
+msgid "RSS feed"
+msgstr ""
+
+msgid "%d min remaining to read"
+msgstr ""

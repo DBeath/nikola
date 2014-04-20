@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,6 +26,7 @@
 
 from __future__ import print_function
 import os
+import webbrowser
 try:
     from BaseHTTPServer import HTTPServer
     from SimpleHTTPServer import SimpleHTTPRequestHandler
@@ -37,7 +38,7 @@ from nikola.plugin_categories import Command
 from nikola.utils import get_logger
 
 
-class CommandBuild(Command):
+class CommandServe(Command):
     """Start test server."""
 
     name = "serve"
@@ -57,11 +58,19 @@ class CommandBuild(Command):
         {
             'name': 'address',
             'short': 'a',
-            'long': '--address',
+            'long': 'address',
             'type': str,
             'default': '127.0.0.1',
             'help': 'Address to bind (default: 127.0.0.1)',
         },
+        {
+            'name': 'browser',
+            'short': 'b',
+            'long': 'browser',
+            'type': bool,
+            'default': False,
+            'help': 'Open the test server in a web browser',
+        }
     )
 
     def _execute(self, options, args):
@@ -75,8 +84,16 @@ class CommandBuild(Command):
             httpd = HTTPServer((options['address'], options['port']),
                                OurHTTPRequestHandler)
             sa = httpd.socket.getsockname()
-            self.logger.notice("Serving HTTP on {0} port {1} ...".format(*sa))
-            httpd.serve_forever()
+            self.logger.info("Serving HTTP on {0} port {1} ...".format(*sa))
+            if options['browser']:
+                server_url = "http://{0}:{1}/".format(options['address'], options['port'])
+                self.logger.info("Opening {0} in the default web browser ...".format(server_url))
+                webbrowser.open(server_url)
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                self.logger.info("Server is shutting down.")
+                exit(130)
 
 
 class OurHTTPRequestHandler(SimpleHTTPRequestHandler):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -53,12 +53,17 @@ class Slides(Directive):
         if len(self.content) == 0:
             return
 
+        if self.site.invariant:  # for testing purposes
+            carousel_id = 'slides_' + 'fixedvaluethatisnotauuid'
+        else:
+            carousel_id = 'slides_' + uuid.uuid4().hex
+
         output = self.site.template_system.render_template(
             'slides.tmpl',
             None,
             {
-                'content': self.content,
-                'carousel_id': 'slides_' + uuid.uuid4().hex,
+                'slides_content': self.content,
+                'carousel_id': carousel_id,
             }
         )
         return [nodes.raw('', output, format='html')]

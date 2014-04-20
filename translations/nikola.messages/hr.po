@@ -4,14 +4,15 @@
 # 
 # Translators:
 # Translators:
+# Translators:
 # tty, 2013
-# tty, 2013
+# tty, 2013-2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2013-11-10 10:11+0000\n"
+"PO-Revision-Date: 2014-04-17 14:46+0000\n"
 "Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
 "Language-Team: Croatian (http://www.transifex.com/projects/p/nikola/language/hr/)\n"
 "MIME-Version: 1.0\n"
@@ -30,10 +31,13 @@ msgid "Tags"
 msgstr "Tagovi"
 
 msgid "Categories"
-msgstr ""
+msgstr "Kategorije"
 
 msgid "Tags and Categories"
-msgstr ""
+msgstr "Tagovi i kategorije"
+
+msgid "Comments"
+msgstr "Komentari"
 
 msgid "Read more"
 msgstr "Čitaj dalje"
@@ -44,8 +48,11 @@ msgstr "Postovi o %s"
 msgid "Next post"
 msgstr "Sljedeći post"
 
-msgid "old posts page %d"
-msgstr "stari postovi stranice %d"
+msgid "old posts, page %d"
+msgstr "stari postovi, stranice %d"
+
+msgid "page %d"
+msgstr "stranice %d"
 
 msgid "Source"
 msgstr "Izvor"
@@ -67,6 +74,9 @@ msgstr "Prethodni post"
 msgid "Also available in:"
 msgstr "Također dostupno i u:"
 
+msgid "Languages:"
+msgstr "Jezici:"
+
 msgid "Original site"
 msgstr "Izvorna stranica"
 
@@ -76,8 +86,23 @@ msgstr "Stariji postovi"
 msgid "Archive"
 msgstr "Arhiva"
 
+msgid "Publication date"
+msgstr "Nadnevak objave"
+
 msgid "Posted:"
 msgstr "Objavljeno:"
 
 msgid "Posts for {month} {year}"
 msgstr "Postovi za {month} {year}"
+
+msgid "Nothing found."
+msgstr "Nema ničeg."
+
+msgid "No posts found."
+msgstr "Nema postova."
+
+msgid "RSS feed"
+msgstr "RSS kanal"
+
+msgid "%d min remaining to read"
+msgstr ""

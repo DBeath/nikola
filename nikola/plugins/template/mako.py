@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -49,6 +49,9 @@ class MakoTemplates(TemplateSystem):
 
     lookup = None
     cache = {}
+    filters = {}
+    directories = []
+    cache_dir = None
 
     def get_deps(self, filename):
         text = util.read_file(filename)
@@ -64,7 +67,7 @@ class MakoTemplates(TemplateSystem):
         return deps
 
     def set_directories(self, directories, cache_folder):
-        """Create a template lookup."""
+        """Set directories and create a template lookup."""
         cache_dir = os.path.join(cache_folder, '.mako.tmp')
         # Workaround for a Mako bug, Issue #825
         if sys.version_info[0] == 2:
@@ -73,13 +76,30 @@ class MakoTemplates(TemplateSystem):
             except UnicodeEncodeError:
                 cache_dir = tempfile.mkdtemp()
                 LOGGER.warning('Because of a Mako bug, setting cache_dir to {0}'.format(cache_dir))
-
         if os.path.exists(cache_dir):
             shutil.rmtree(cache_dir)
+        self.directories = directories
+        self.cache_dir = cache_dir
+        self.create_lookup()
+
+    def inject_directory(self, directory):
+        """if it's not there, add the directory to the lookup with lowest priority, and
+        recreate the lookup."""
+        if directory not in self.directories:
+            self.directories.append(directory)
+            self.create_lookup()
+
+    def create_lookup(self):
+        """Create a template lookup object."""
         self.lookup = TemplateLookup(
-            directories=directories,
-            module_directory=cache_dir,
+            directories=self.directories,
+            module_directory=self.cache_dir,
             output_encoding='utf-8')
+
+    def set_site(self, site):
+        """Sets the site."""
+        self.site = site
+        self.filters.update(self.site.config['TEMPLATE_FILTERS'])
 
     def render_template(self, template_name, output_name, context):
         """Render the template into output_name using context."""
@@ -94,6 +114,8 @@ class MakoTemplates(TemplateSystem):
 
     def render_template_to_string(self, template, context):
         """ Render template to a string using context. """
+
+        context = context.update(self.filters)
 
         return Template(template).render(**context)
 

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -73,8 +73,7 @@ class Archive(Task):
                 context["permalink"] = self.site.link("archive", year, lang)
                 if not kw["create_monthly_archive"]:
                     template_name = "list_post.tmpl"
-                    post_list = [self.site.global_data[post] for post in posts]
-                    post_list.sort(key=lambda a: a.date)
+                    post_list = sorted(posts, key=lambda a: a.date)
                     post_list.reverse()
                     context["posts"] = post_list
                 else:  # Monthly archives, just list the months
@@ -106,8 +105,7 @@ class Archive(Task):
                     kw['output_folder'], self.site.path("archive", yearmonth,
                                                         lang))
                 year, month = yearmonth.split('/')
-                post_list = [self.site.global_data[post] for post in posts]
-                post_list.sort(key=lambda a: a.date)
+                post_list = sorted(posts, key=lambda a: a.date)
                 post_list.reverse()
                 context = {}
                 context["lang"] = lang
@@ -141,8 +139,8 @@ class Archive(Task):
                     kw['output_folder'], self.site.path("archive", None,
                                                         lang))
                 context["title"] = kw["messages"][lang]["Archive"]
-                context["items"] = [(year, self.site.link("archive", year, lang))
-                                    for year in years]
+                context["items"] = [(y, self.site.link("archive", y, lang))
+                                    for y in years]
                 context["permalink"] = self.site.link("archive", None, lang)
                 task = self.site.generic_post_list_renderer(
                     lang,

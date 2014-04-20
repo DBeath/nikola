@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Roberto Alsina and others.
+# Copyright © 2012-2014 Roberto Alsina and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -25,14 +25,12 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from __future__ import print_function
-from ast import literal_eval
 import codecs
 from datetime import datetime
 import os
 import sys
 import subprocess
 import time
-import pytz
 
 from blinker import signal
 
@@ -40,8 +38,8 @@ from nikola.plugin_categories import Command
 from nikola.utils import remove_file, get_logger
 
 
-class Deploy(Command):
-    """Deploy site.  """
+class CommandDeploy(Command):
+    """Deploy site."""
     name = "deploy"
 
     doc_usage = ""
@@ -63,10 +61,10 @@ class Deploy(Command):
 
         deploy_drafts = self.site.config.get('DEPLOY_DRAFTS', True)
         deploy_future = self.site.config.get('DEPLOY_FUTURE', False)
+        undeployed_posts = []
         if not (deploy_drafts and deploy_future):
             # Remove drafts and future posts
             out_dir = self.site.config['OUTPUT_FOLDER']
-            undeployed_posts = []
             self.site.scan_posts()
             for post in self.site.timeline:
                 if (not deploy_drafts and post.is_draft) or \
@@ -76,7 +74,7 @@ class Deploy(Command):
                     undeployed_posts.append(post)
 
         for command in self.site.config['DEPLOY_COMMANDS']:
-            self.logger.notice("==> {0}".format(command))
+            self.logger.info("==> {0}".format(command))
             try:
                 subprocess.check_call(command, shell=True)
             except subprocess.CalledProcessError as e:
@@ -84,26 +82,22 @@ class Deploy(Command):
                                   'returned {1}'.format(e.cmd, e.returncode))
                 sys.exit(e.returncode)
 
-        self.logger.notice("Successful deployment")
-        tzinfo = pytz.timezone(self.site.config['TIMEZONE'])
+        self.logger.info("Successful deployment")
         try:
-            with open(timestamp_path, 'rb') as inf:
-                last_deploy = literal_eval(inf.read().strip())
-                if tzinfo:
-                    last_deploy = last_deploy.replace(tzinfo=tzinfo)
+            with codecs.open(timestamp_path, 'rb', 'utf8') as inf:
+                last_deploy = datetime.strptime(inf.read().strip(), "%Y-%m-%dT%H:%M:%S.%f")
                 clean = False
-        except Exception:
+        except (IOError, Exception) as e:
+            self.logger.debug("Problem when reading `{0}`: {1}".format(timestamp_path, e))
             last_deploy = datetime(1970, 1, 1)
-            if tzinfo:
-                last_deploy = last_deploy.replace(tzinfo=tzinfo)
             clean = True
 
-        new_deploy = datetime.now()
+        new_deploy = datetime.utcnow()
         self._emit_deploy_event(last_deploy, new_deploy, clean, undeployed_posts)
 
         # Store timestamp of successful deployment
         with codecs.open(timestamp_path, 'wb+', 'utf8') as outf:
-            outf.write(repr(new_deploy))
+            outf.write(new_deploy.isoformat())
 
     def _emit_deploy_event(self, last_deploy, new_deploy, clean=False, undeployed=None):
         """ Emit events for all timeline entries newer than last deploy.
@@ -119,9 +113,6 @@ class Deploy(Command):
 
         """
 
-        if undeployed is None:
-            undeployed = []
-
         event = {
             'last_deploy': last_deploy,
             'new_deploy': new_deploy,
@@ -131,7 +122,7 @@ class Deploy(Command):
 
         deployed = [
             entry for entry in self.site.timeline
-            if entry.date > last_deploy and entry not in undeployed
+            if entry.date > last_deploy.replace(tzinfo=self.site.tzinfo) and entry not in undeployed
         ]
 
         event['deployed'] = deployed

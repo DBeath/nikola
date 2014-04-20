@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Copyright © 2012-2013 Daniel Devine and others.
+# Copyright © 2012-2014 Daniel Devine and others.
 
 # Permission is hereby granted, free of charge, to any
 # person obtaining a copy of this software and associated
@@ -26,8 +26,10 @@
 
 from nikola.plugin_categories import SignalHandler
 from blinker import signal
-import logbook
 import os
+
+from nikola import DEBUG
+from nikola.utils import ColorfulStderrHandler
 
 
 class StderrHandler(SignalHandler):
@@ -38,8 +40,12 @@ class StderrHandler(SignalHandler):
         """Attach the handler to the logger."""
         conf = self.site.config.get('LOGGING_HANDLERS').get('stderr')
         if conf or os.getenv('NIKOLA_DEBUG'):
-            self.site.loghandlers.append(logbook.StderrHandler(
-                level='DEBUG' if os.getenv('NIKOLA_DEBUG') else conf.get('loglevel', 'WARNING').upper(),
+            self.site.loghandlers.append(ColorfulStderrHandler(
+                # We do not allow the level to be something else than 'DEBUG'
+                # or 'INFO'  Any other level can have bad effects on the user
+                # experience and is discouraged.
+                # (oh, and it was incorrectly set to WARNING before)
+                level='DEBUG' if DEBUG or (conf.get('loglevel', 'INFO').upper() == 'DEBUG') else 'INFO',
                 format_string=u'[{record.time:%Y-%m-%dT%H:%M:%SZ}] {record.level_name}: {record.channel}: {record.message}'
             ))
 
