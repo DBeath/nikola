@@ -59,17 +59,21 @@ class BasePlugin(IPlugin):
         then templates/mako or templates/jinja will be inserted very early in
         the theme chain."""
 
-        # Sorry, found no other way to get this
-        mod_path = sys.modules[self.__class__.__module__].__file__
-        mod_dir = os.path.dirname(mod_path)
-        tmpl_dir = os.path.join(
-            mod_dir,
-            'templates',
-            self.site.template_system.name
-        )
-        if os.path.isdir(tmpl_dir):
-            # Inject tmpl_dir low in the theme chain
-            self.site.template_system.inject_directory(tmpl_dir)
+        try:
+            # Sorry, found no other way to get this
+            mod_path = sys.modules[self.__class__.__module__].__file__
+            mod_dir = os.path.dirname(mod_path)
+            tmpl_dir = os.path.join(
+                mod_dir, 'templates', self.site.template_system.name
+            )
+            if os.path.isdir(tmpl_dir):
+                # Inject tmpl_dir low in the theme chain
+                self.site.template_system.inject_directory(tmpl_dir)
+        except AttributeError:
+            # In some cases, __builtin__ becomes the module of a plugin.
+            # We couldn’t reproduce that, and really find the reason for this,
+            # so let’s just ignore it and be done with it.
+            pass
 
 
 class Command(BasePlugin, DoitCommand):
@@ -80,7 +84,7 @@ class Command(BasePlugin, DoitCommand):
 
     doc_purpose = "A short explanation."
     doc_usage = ""
-    doc_description = None  # None value will completely ommit line from doc
+    doc_description = None  # None value will completely omit line from doc
     # see http://python-doit.sourceforge.net/cmd_run.html#parameters
     cmd_options = ()
     needs_config = True
@@ -238,11 +242,6 @@ class RestExtension(BasePlugin):
 
 class MarkdownExtension(BasePlugin):
     name = "dummy_markdown_extension"
-
-    def set_site(self, site):
-        from nikola.plugins.compile.markdown import CompileMarkdown
-        CompileMarkdown.extensions.append(self)
-        return super(MarkdownExtension, self).set_site(site)
 
 
 class SignalHandler(BasePlugin):

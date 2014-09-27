@@ -26,7 +26,7 @@
 
 """Utility functions."""
 
-from __future__ import print_function, unicode_literals
+from __future__ import print_function, unicode_literals, absolute_import
 from collections import defaultdict, Callable
 import calendar
 import datetime
@@ -40,7 +40,7 @@ import json
 import shutil
 import subprocess
 import sys
-from zipfile import ZipFile as zip
+from zipfile import ZipFile as zipf
 try:
     from imp import reload
 except ImportError:
@@ -51,7 +51,7 @@ import dateutil.tz
 import logbook
 from logbook.more import ExceptionHandler, ColorizedStderrHandler
 
-from . import DEBUG
+from nikola import DEBUG
 
 
 class ApplicationWarning(Exception):
@@ -85,6 +85,8 @@ STDERR_HANDLER = [ColorfulStderrHandler(
 LOGGER = get_logger('Nikola', STDERR_HANDLER)
 STRICT_HANDLER = ExceptionHandler(ApplicationWarning, level='WARNING')
 
+USE_SLUGIFY = True
+
 # This will block out the default handler and will hide all unwanted
 # messages, properly.
 logbook.NullHandler().push_application()
@@ -93,6 +95,20 @@ if DEBUG:
     logging.basicConfig(level=logging.DEBUG)
 else:
     logging.basicConfig(level=logging.INFO)
+
+
+import warnings
+
+
+def showwarning(message, category, filename, lineno, file=None, line=None):
+    """Show a warning (from the warnings subsystem) to the user."""
+    try:
+        n = category.__name__
+    except AttributeError:
+        n = str(category)
+    get_logger(n, STDERR_HANDLER).warn('{0}:{1}: {2}'.format(filename, lineno, message))
+
+warnings.showwarning = showwarning
 
 
 def req_missing(names, purpose, python=True, optional=False):
@@ -145,6 +161,7 @@ if sys.version_info[0] == 3:
     bytes_str = bytes
     unicode_str = str
     unichr = chr
+    raw_input = input
     from imp import reload as _reload
 else:
     bytes_str = str
@@ -155,6 +172,7 @@ else:
 from doit import tools
 from unidecode import unidecode
 from pkg_resources import resource_filename
+from nikola import filters as task_filters
 
 import PyRSS2Gen as rss
 
@@ -164,7 +182,8 @@ __all__ = ['get_theme_path', 'get_theme_chain', 'load_messages', 'copy_tree',
            '_reload', 'unicode_str', 'bytes_str', 'unichr', 'Functionary',
            'TranslatableSetting', 'TemplateHookRegistry', 'LocaleBorg',
            'sys_encode', 'sys_decode', 'makedirs', 'get_parent_theme_name',
-           'demote_headers', 'get_translation_candidate', 'write_metadata']
+           'demote_headers', 'get_translation_candidate', 'write_metadata',
+           'ask', 'ask_yesno']
 
 # Are you looking for 'generic_rss_renderer'?
 # It's defined in nikola.nikola.Nikola (the site object).
@@ -316,14 +335,7 @@ class TranslatableSetting(object):
 
     def __repr__(self):
         """Provide a representation for programmers."""
-        header = '<TranslatableSetting> '
-
-        if not self.translated:
-            values = [repr(self())]
-        else:
-            values = ['{0}={1!r}'.format(k, v) for k, v in self.values.items()]
-
-        return header + ', '.join(values)
+        return '<TranslatableSetting: {0!r}>'.format(self.name)
 
     def format(self, *args, **kwargs):
         """Format ALL the values in the setting the same way."""
@@ -469,7 +481,7 @@ class TemplateHookRegistry(object):
 class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
         try:
-            return json.JSONEncoder.default(self, obj)
+            return super(CustomEncoder, self).default(obj)
         except TypeError:
             s = repr(obj).split('0x', 1)[0]
             return s
@@ -500,12 +512,12 @@ class config_changed(tools.config_changed):
                                                            cls=CustomEncoder))
 
 
-def get_theme_path(theme):
+def get_theme_path(theme, _themes_dir='themes'):
     """Given a theme name, returns the path where its files are located.
 
     Looks in ./themes and in the place where themes go when installed.
     """
-    dir_name = os.path.join('themes', theme)
+    dir_name = os.path.join(_themes_dir, theme)
     if os.path.isdir(dir_name):
         return dir_name
     dir_name = resource_filename('nikola', os.path.join('data', 'themes', theme))
@@ -514,9 +526,9 @@ def get_theme_path(theme):
     raise Exception("Can't find theme '{0}'".format(theme))
 
 
-def get_template_engine(themes):
+def get_template_engine(themes, _themes_dir='themes'):
     for theme_name in themes:
-        engine_path = os.path.join(get_theme_path(theme_name), 'engine')
+        engine_path = os.path.join(get_theme_path(theme_name, _themes_dir), 'engine')
         if os.path.isfile(engine_path):
             with open(engine_path) as fd:
                 return fd.readlines()[0].strip()
@@ -524,20 +536,20 @@ def get_template_engine(themes):
     return 'mako'
 
 
-def get_parent_theme_name(theme_name):
-    parent_path = os.path.join(get_theme_path(theme_name), 'parent')
+def get_parent_theme_name(theme_name, _themes_dir='themes'):
+    parent_path = os.path.join(get_theme_path(theme_name, _themes_dir), 'parent')
     if os.path.isfile(parent_path):
         with open(parent_path) as fd:
             return fd.readlines()[0].strip()
     return None
 
 
-def get_theme_chain(theme):
+def get_theme_chain(theme, _themes_dir='themes'):
     """Create the full theme inheritance chain."""
     themes = [theme]
 
     while True:
-        parent = get_parent_theme_name(themes[-1])
+        parent = get_parent_theme_name(themes[-1], _themes_dir)
         # Avoid silly loops
         if parent is None or parent in themes:
             break
@@ -659,11 +671,11 @@ def remove_file(source):
 # slugify is copied from
 # http://code.activestate.com/recipes/
 # 577257-slugify-make-a-string-usable-in-a-url-or-filename/
-_slugify_strip_re = re.compile(r'[^\w\s-]')
+_slugify_strip_re = re.compile(r'[^+\w\s-]')
 _slugify_hyphenate_re = re.compile(r'[-\s]+')
 
 
-def slugify(value):
+def slugify(value, force=False):
     """
     Normalizes string, converts to lowercase, removes non-alpha characters,
     and converts spaces to hyphens.
@@ -682,18 +694,36 @@ def slugify(value):
     """
     if not isinstance(value, unicode_str):
         raise ValueError("Not a unicode object: {0}".format(value))
-    value = unidecode(value)
-    # WARNING: this may not be python2/3 equivalent
-    # value = unicode(_slugify_strip_re.sub('', value).strip().lower())
-    value = str(_slugify_strip_re.sub('', value).strip().lower())
-    return _slugify_hyphenate_re.sub('-', value)
+    if USE_SLUGIFY or force:
+        # This is the standard state of slugify, which actually does some work.
+        # It is the preferred style, especially for Western languages.
+        value = unidecode(value)
+        value = str(_slugify_strip_re.sub('', value).strip().lower())
+        return _slugify_hyphenate_re.sub('-', value)
+    else:
+        # This is the “disarmed” state of slugify, which lets the user
+        # have any character they please (be it regular ASCII with spaces,
+        # or another alphabet entirely).  This might be bad in some
+        # environments, and as such, USE_SLUGIFY is better off being True!
+
+        # We still replace some characters, though.  In particular, we need
+        # to replace ? and #, which should not appear in URLs, and some
+        # Windows-unsafe characters.  This list might be even longer.
+        rc = '/\\?#"\'\r\n\t*:<>|"'
+
+        for c in rc:
+            value = value.replace(c, '-')
+        return value
 
 
-def unslugify(value):
+def unslugify(value, discard_numbers=True):
+    """Given a slug string (as a filename), return a human readable string.
+
+    If discard_numbers is True, numbers right at the beginning of input
+    will be removed.
     """
-    Given a slug string (as a filename), return a human readable string
-    """
-    value = re.sub('^[0-9]+', '', value)
+    if discard_numbers:
+        value = re.sub('^[0-9]+', '', value)
     value = re.sub('([_\-\.])', ' ', value)
     value = value.strip().capitalize()
     return value
@@ -710,17 +740,18 @@ def extract_all(zipfile, path='themes'):
     pwd = os.getcwd()
     makedirs(path)
     os.chdir(path)
-    with zip(zipfile) as z:
-        namelist = z.namelist()
-        for f in namelist:
-            if f.endswith('/') and '..' in f:
-                raise UnsafeZipException('The zip file contains ".." and is '
-                                         'not safe to expand.')
-        for f in namelist:
-            if f.endswith('/'):
-                makedirs(f)
-            else:
-                z.extract(f)
+    z = zipf(zipfile)
+    namelist = z.namelist()
+    for f in namelist:
+        if f.endswith('/') and '..' in f:
+            raise UnsafeZipException('The zip file contains ".." and is '
+                                     'not safe to expand.')
+    for f in namelist:
+        if f.endswith('/'):
+            makedirs(f)
+        else:
+            z.extract(f)
+    z.close()
     os.chdir(pwd)
 
 
@@ -750,20 +781,25 @@ def get_tzname(dt):
 
 def current_time(tzinfo=None):
     if tzinfo is not None:
-        dt = datetime.datetime.utcnow()
-        dt = tzinfo.fromutc(dt)
+        dt = datetime.datetime.now(tzinfo)
     else:
         dt = datetime.datetime.now(dateutil.tz.tzlocal())
     return dt
 
 
-def apply_filters(task, filters):
+def apply_filters(task, filters, skip_ext=None):
     """
     Given a task, checks its targets.
     If any of the targets has a filter that matches,
     adds the filter commands to the commands of the task,
     and the filter itself to the uptodate of the task.
     """
+
+    if '.php' in filters.keys():
+        if task_filters.php_template_injection not in filters['.php']:
+            filters['.php'].append(task_filters.php_template_injection)
+    else:
+        filters['.php'] = [task_filters.php_template_injection]
 
     def filter_matches(ext):
         for key, value in list(filters.items()):
@@ -778,6 +814,8 @@ def apply_filters(task, filters):
 
     for target in task.get('targets', []):
         ext = os.path.splitext(target)[-1].lower()
+        if skip_ext and ext in skip_ext:
+            continue
         filter_ = filter_matches(ext)
         if filter_:
             for action in filter_:
@@ -847,7 +885,7 @@ def get_crumbs(path, is_file=False, index_folder=None):
     return list(reversed(_crumbs))
 
 
-def get_asset_path(path, themes, files_folders={'files': ''}):
+def get_asset_path(path, themes, files_folders={'files': ''}, _themes_dir='themes'):
     """
     .. versionchanged:: 6.1.0
 
@@ -872,7 +910,7 @@ def get_asset_path(path, themes, files_folders={'files': ''}):
     """
     for theme_name in themes:
         candidate = os.path.join(
-            get_theme_path(theme_name),
+            get_theme_path(theme_name, _themes_dir),
             path
         )
         if os.path.isfile(candidate):
@@ -884,6 +922,11 @@ def get_asset_path(path, themes, files_folders={'files': ''}):
 
     # whatever!
     return None
+
+
+class LocaleBorgUninitializedException(Exception):
+    def __init__(self):
+        super(LocaleBorgUninitializedException, self).__init__("Attempt to use LocaleBorg before initialization")
 
 
 class LocaleBorg(object):
@@ -920,6 +963,9 @@ class LocaleBorg(object):
     Examples: "Spanish", "French" can't do the full circle set / get / set
     That used to break calendar, but now seems is not the case, with month at least
     """
+
+    initialized = False
+
     @classmethod
     def initialize(cls, locales, initial_lang):
         """
@@ -954,7 +1000,7 @@ class LocaleBorg(object):
 
     def __init__(self):
         if not self.initialized:
-            raise Exception("Attempt to use LocaleBorg before initialization")
+            raise LocaleBorgUninitializedException()
         self.__dict__ = self.__shared_state
 
     def set_locale(self, lang):
@@ -990,6 +1036,25 @@ class LocaleBorg(object):
         # paranoid about calendar ending in the wrong locale (windows)
         self.set_locale(self.current_lang)
         return s
+
+
+class ExtendedRSS2(rss.RSS2):
+    xsl_stylesheet_href = None
+
+    def publish(self, handler):
+        if self.xsl_stylesheet_href:
+            handler.processingInstruction("xml-stylesheet", 'type="text/xsl" href="{0}" media="all"'.format(self.xsl_stylesheet_href))
+        # old-style class in py2
+        rss.RSS2.publish(self, handler)
+
+    def publish_extensions(self, handler):
+        if self.self_url:
+            handler.startElement("atom:link", {
+                'href': self.self_url,
+                'rel': "self",
+                'type': "application/rss+xml"
+            })
+            handler.endElement("atom:link")
 
 
 class ExtendedItem(rss.RSSItem):
@@ -1144,3 +1209,118 @@ def write_metadata(data):
     meta.append('')
 
     return '\n'.join(meta)
+
+
+def ask(query, default=None):
+    """Ask a question."""
+    if default:
+        default_q = ' [{0}]'.format(default)
+    else:
+        default_q = ''
+    inp = raw_input("{query}{default_q}: ".format(query=query, default_q=default_q)).strip()
+    if inp or default is None:
+        return inp
+    else:
+        return default
+
+
+def ask_yesno(query, default=None):
+    """Ask a yes/no question."""
+    if default is None:
+        default_q = ' [y/n]'
+    elif default is True:
+        default_q = ' [Y/n]'
+    elif default is False:
+        default_q = ' [y/N]'
+    inp = raw_input("{query}{default_q} ".format(query=query, default_q=default_q)).strip()
+    if inp:
+        return inp.lower().startswith('y')
+    elif default is not None:
+        return default
+    else:
+        # Loop if no answer and no default.
+        return ask_yesno(query, default)
+
+
+from nikola.plugin_categories import Command
+from doit.cmdparse import CmdParse
+
+
+class CommandWrapper(object):
+    """Converts commands into functions."""
+
+    def __init__(self, cmd, commands_object):
+        self.cmd = cmd
+        self.commands_object = commands_object
+
+    def __call__(self, *args, **kwargs):
+        if args or (not args and not kwargs):
+            self.commands_object._run([self.cmd] + list(args))
+        else:
+            # Here's where the keyword magic would have to go
+            self.commands_object._run_with_kw(self.cmd, *args, **kwargs)
+
+
+class Commands(object):
+
+    """Nikola Commands.
+
+    Sample usage:
+    >>> commands.check('-l')                     # doctest: +SKIP
+
+    Or, if you know the internal argument names:
+    >>> commands.check(list=True)                # doctest: +SKIP
+    """
+
+    def __init__(self, main):
+        """Takes a main instance, works as wrapper for commands."""
+        self._cmdnames = []
+        for k, v in main.get_commands().items():
+            self._cmdnames.append(k)
+            if k in ['run', 'init']:
+                continue
+            if sys.version_info[0] == 2:
+                k2 = bytes(k)
+            else:
+                k2 = k
+            nc = type(
+                k2,
+                (CommandWrapper,),
+                {
+                    '__doc__': options2docstring(k, main.sub_cmds[k].options)
+                })
+            setattr(self, k, nc(k, self))
+        self.main = main
+
+    def _run(self, cmd_args):
+        self.main.run(cmd_args)
+
+    def _run_with_kw(self, cmd, *a, **kw):
+        cmd = self.main.sub_cmds[cmd]
+        options, _ = CmdParse(cmd.options).parse([])
+        options.update(kw)
+        if isinstance(cmd, Command):
+            cmd.execute(options=options, args=a)
+        else:  # Doit command
+            cmd.execute(options, a)
+
+    def __repr__(self):
+        """Return useful and verbose help."""
+
+        return """\
+<Nikola Commands>
+
+    Sample usage:
+    >>> commands.check('-l')
+
+    Or, if you know the internal argument names:
+    >>> commands.check(list=True)
+
+Available commands: {0}.""".format(', '.join(self._cmdnames))
+
+
+def options2docstring(name, options):
+    result = ['Function wrapper for command %s' % name, 'arguments:']
+    for opt in options:
+        result.append('{0} type {1} default {2}'.format(opt.name, opt.type.__name__, opt.default))
+    return '\n'.join(result)

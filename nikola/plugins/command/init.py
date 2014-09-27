@@ -24,24 +24,24 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-from __future__ import print_function
+from __future__ import print_function, unicode_literals
 import os
-import sys
 import shutil
-import codecs
+import io
 import json
 import textwrap
 import datetime
+import unidecode
 import dateutil.tz
-
 from mako.template import Template
 from pkg_resources import resource_filename
 
 import nikola
 from nikola.nikola import DEFAULT_TRANSLATIONS_PATTERN, DEFAULT_INDEX_READ_MORE_LINK, DEFAULT_RSS_READ_MORE_LINK, LEGAL_VALUES
 from nikola.plugin_categories import Command
-from nikola.utils import get_logger, makedirs, STDERR_HANDLER, load_messages
-from nikola.winutils import fix_git_symlinked
+from nikola.utils import ask, ask_yesno, get_logger, makedirs, STDERR_HANDLER, load_messages
+from nikola.packages.tzlocal import get_localzone
+
 
 LOGGER = get_logger('init', STDERR_HANDLER)
 
@@ -236,14 +236,13 @@ class CommandInit(Command):
     def copy_sample_site(cls, target):
         src = resource_filename('nikola', os.path.join('data', 'samplesite'))
         shutil.copytree(src, target)
-        fix_git_symlinked(src, target)
 
     @classmethod
     def create_configuration(cls, target):
         template_path = resource_filename('nikola', 'conf.py.in')
         conf_template = Template(filename=template_path)
         conf_path = os.path.join(target, 'conf.py')
-        with codecs.open(conf_path, 'w+', 'utf8') as fd:
+        with io.open(conf_path, 'w+', encoding='utf8') as fd:
             fd.write(conf_template.render(**prepare_config(SAMPLE_CONF)))
 
     @classmethod
@@ -254,30 +253,6 @@ class CommandInit(Command):
     @staticmethod
     def ask_questions(target):
         """Ask some questions about Nikola."""
-        def ask(query, default):
-            """Ask a question."""
-            if default:
-                default_q = ' [{0}]'.format(default)
-            else:
-                default_q = ''
-            inpf = raw_input if sys.version_info[0] == 2 else input
-            inp = inpf("{query}{default_q}: ".format(query=query, default_q=default_q)).strip()
-            return inp if inp else default
-
-        def ask_yesno(query, default=None):
-            if default is None:
-                default_q = ' [y/n]'
-            elif default is True:
-                default_q = ' [Y/n]'
-            elif default is False:
-                default_q = ' [y/N]'
-            inpf = raw_input if sys.version_info[0] == 2 else input
-            inp = inpf("{query}{default_q} ".format(query=query, default_q=default_q)).strip()
-            if inp:
-                return inp.lower().startswith('y')
-            else:
-                return default
-
         def lhandler(default, toconf, show_header=True):
             if show_header:
                 print("We will now ask you to provide the list of languages you want to use.")
@@ -286,7 +261,11 @@ class CommandInit(Command):
             answer = ask('Language(s) to use', 'en')
             while answer.strip() == '?':
                 print('\n# Available languages:')
-                print(SAMPLE_CONF['_SUPPORTED_LANGUAGES'] + '\n')
+                try:
+                    print(SAMPLE_CONF['_SUPPORTED_LANGUAGES'] + '\n')
+                except UnicodeEncodeError:
+                    # avoid Unicode characters in supported language names
+                    print(unidecode.unidecode(SAMPLE_CONF['_SUPPORTED_LANGUAGES']) + '\n')
                 answer = ask('Language(s) to use', 'en')
 
             langs = [i.strip().lower().replace('-', '_') for i in answer.split(',')]
@@ -324,7 +303,11 @@ class CommandInit(Command):
             print("")
             answered = False
             while not answered:
-                answer = ask('Time zone', 'UTC')
+                try:
+                    lz = get_localzone()
+                except:
+                    lz = None
+                answer = ask('Time zone', lz if lz else "UTC")
                 tz = dateutil.tz.gettz(answer)
                 if tz is not None:
                     time = datetime.datetime.now(tz).strftime('%H:%M:%S')
@@ -368,7 +351,7 @@ class CommandInit(Command):
             ('Destination', None, False, '!target'),
             ('Site title', 'My Nikola Site', True, 'BLOG_TITLE'),
             ('Site author', 'Nikola Tesla', True, 'BLOG_AUTHOR'),
-            ('Site author’s e-mail', 'n.tesla@example.com', True, 'BLOG_EMAIL'),
+            ('Site author\'s e-mail', 'n.tesla@example.com', True, 'BLOG_EMAIL'),
             ('Site description', 'This is a demo site for Nikola.', True, 'BLOG_DESCRIPTION'),
             ('Site URL', 'http://getnikola.com/', True, 'SITE_URL'),
             ('Questions about languages and locales', None, None, None),

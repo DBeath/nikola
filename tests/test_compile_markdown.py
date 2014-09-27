@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-# This code is so you can run the samples without installing the package,
-# and should be before any import touching nikola, in any file under tests/
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
-import codecs
+import io
 import shutil
 import tempfile
 import unittest
@@ -28,13 +25,13 @@ class CompileMarkdownTests(BaseTestCase):
         self.compiler.set_site(FakeSite())
 
     def compile(self, input_string):
-        with codecs.open(self.input_path, "w+", "utf8") as input_file:
+        with io.open(self.input_path, "w+", encoding="utf8") as input_file:
             input_file.write(input_string)
 
         self.compiler.compile_html(self.input_path, self.output_path)
 
         output_str = None
-        with codecs.open(self.output_path, "r", "utf8") as output_path:
+        with io.open(self.output_path, "r", encoding="utf8") as output_path:
             output_str = output_path.read()
 
         return output_str
@@ -55,9 +52,9 @@ class CompileMarkdownTests(BaseTestCase):
         expected_output = '''\
 <table class="codehilitetable"><tr><td class="linenos">\
 <div class="linenodiv"><pre>1</pre></div>\
-</td><td class="code"><div class="code">\
-<pre><span class="kn">from</span> <span class="nn">this</span>
-</pre></div>
+</td><td class="code"><pre class="code literal-block">\
+<span class="kn">from</span> <span class="nn">this</span>
+</pre>
 </td></tr></table>
 '''
 

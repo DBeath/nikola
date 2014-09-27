@@ -5,15 +5,16 @@
 # Translators:
 # Translators:
 # Translators:
-# Eero Kari <eero.kari@gmail.com>, 2013
-# Eero Kari <eero.kari@gmail.com>, 2013-2014
+# Translators:
+# ekari <eero.kari@gmail.com>, 2013
+# ekari <eero.kari@gmail.com>, 2013-2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2014-04-17 14:46+0000\n"
-"Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
+"PO-Revision-Date: 2014-07-31 12:30+0000\n"
+"Last-Translator: Chris Warrick <kwpolska@gmail.com>\n"
 "Language-Team: Finnish (http://www.transifex.com/projects/p/nikola/language/fi/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -37,7 +38,7 @@ msgid "Tags and Categories"
 msgstr "Tagit ja kategoriat"
 
 msgid "Comments"
-msgstr ""
+msgstr "Kommentit"
 
 msgid "Read more"
 msgstr "Lue lisää"
@@ -75,7 +76,7 @@ msgid "Also available in:"
 msgstr "Saatavilla myös:"
 
 msgid "Languages:"
-msgstr ""
+msgstr "Kielet:"
 
 msgid "Original site"
 msgstr "Alkuperäinen sivusto"
@@ -87,7 +88,7 @@ msgid "Archive"
 msgstr "Arkisto"
 
 msgid "Publication date"
-msgstr ""
+msgstr "Julkaisupäivämäärä"
 
 msgid "Posted:"
 msgstr "Postattu:"
@@ -102,7 +103,10 @@ msgid "No posts found."
 msgstr "Postauksia ei löytynyt."
 
 msgid "RSS feed"
-msgstr ""
+msgstr "RSS syöte"
 
 msgid "%d min remaining to read"
+msgstr ""
+
+msgid "Skip to main content"
 msgstr ""

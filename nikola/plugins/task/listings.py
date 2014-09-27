@@ -32,9 +32,14 @@ from pygments import highlight
 from pygments.lexers import get_lexer_for_filename, TextLexer
 from pygments.formatters import HtmlFormatter
 import natsort
+import re
 
 from nikola.plugin_categories import Task
 from nikola import utils
+
+
+# FIXME: (almost) duplicated with mdx_nikola.py
+CODERE = re.compile('<div class="code"><pre>(.*?)</pre></div>', flags=re.MULTILINE | re.DOTALL)
 
 
 class Listings(Task):
@@ -68,12 +73,15 @@ class Listings(Task):
                     code = highlight(fd.read(), lexer,
                                      HtmlFormatter(cssclass='code',
                                                    linenos="table", nowrap=False,
-                                                   lineanchors=utils.slugify(in_name),
+                                                   lineanchors=utils.slugify(in_name, force=True),
                                                    anchorlinenos=True))
+                # the pygments highlighter uses <div class="codehilite"><pre>
+                # for code.  We switch it to reST's <pre class="code">.
+                code = CODERE.sub('<pre class="code literal-block">\\1</pre>', code)
                 title = os.path.basename(in_name)
             else:
                 code = ''
-                title = ''
+                title = os.path.split(os.path.dirname(out_name))[1]
             crumbs = utils.get_crumbs(os.path.relpath(out_name,
                                                       kw['output_folder']),
                                       is_file=True)
@@ -84,6 +92,10 @@ class Listings(Task):
                     os.path.join(
                         kw['output_folder'],
                         kw['listings_folder'])))
+            if self.site.config['COPY_SOURCES']:
+                source_link = permalink[:-5]
+            else:
+                source_link = None
             context = {
                 'code': code,
                 'title': title,
@@ -93,6 +105,7 @@ class Listings(Task):
                 'folders': natsort.natsorted(folders),
                 'files': natsort.natsorted(files),
                 'description': title,
+                'source_link': source_link,
             }
             self.site.render_template('listing.tmpl', out_name,
                                       context)
@@ -107,6 +120,12 @@ class Listings(Task):
 
             for k, v in self.site.GLOBAL_CONTEXT['template_hooks'].items():
                 uptodate['||template_hooks|{0}||'.format(k)] = v._items
+
+            for k in self.site._GLOBAL_CONTEXT_TRANSLATABLE:
+                uptodate[k] = self.site.GLOBAL_CONTEXT[k](kw['default_lang'])
+
+            # save navigation links as dependencies
+            uptodate['navigation_links'] = uptodate['c']['navigation_links'](kw['default_lang'])
 
             uptodate2 = uptodate.copy()
             uptodate2['f'] = files
@@ -148,6 +167,19 @@ class Listings(Task):
                     'uptodate': [utils.config_changed(uptodate)],
                     'clean': True,
                 }
+                if self.site.config['COPY_SOURCES']:
+                    out_name = os.path.join(
+                        kw['output_folder'],
+                        root,
+                        f)
+                    yield {
+                        'basename': self.name,
+                        'name': out_name,
+                        'file_dep': [in_name],
+                        'targets': [out_name],
+                        'actions': [(utils.copy_file, [in_name, out_name])],
+                        'clean': True,
+                    }
 
     def listing_path(self, name, lang):
         if not name.endswith('.html'):

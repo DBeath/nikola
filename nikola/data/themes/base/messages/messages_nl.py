@@ -2,7 +2,7 @@
 from __future__ import unicode_literals
 
 MESSAGES = {
-    "%d min remaining to read": "nog %d min leestijd ",
+    "%d min remaining to read": "%d min resterende leestijd ",
     "Also available in:": "Ook beschikbaar in:",
     "Archive": "Archief",
     "Categories": "Categorieën",
@@ -25,6 +25,7 @@ MESSAGES = {
     "RSS feed": "RSS-feed",
     "Read in English": "Lees in het Nederlands",
     "Read more": "Lees verder",
+    "Skip to main content": "Ga door naar de hoofdinhoud",
     "Source": "Bron",
     "Tags and Categories": "Tags en Categorieën",
     "Tags": "Tags",

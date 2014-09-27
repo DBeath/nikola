@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, absolute_import
 
-# This code is so you can run the samples without installing the package,
-# and should be before any import touching nikola, in any file under tests/
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
 import unittest
@@ -216,6 +213,7 @@ class CommandImportWordpressTest(BasicCommandImportWordpress):
             self.import_filename)
         self.import_command.context = self.import_command.populate_context(
             channel)
+        self.import_command.base_dir = ''
         self.import_command.output_folder = 'new_site'
         self.import_command.squash_newlines = True
         self.import_command.no_downloads = False

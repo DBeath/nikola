@@ -25,11 +25,11 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from __future__ import unicode_literals, print_function
-import codecs
+import io
 import datetime
-import locale
 import os
 import sys
+import subprocess
 
 from blinker import signal
 import dateutil.tz
@@ -84,7 +84,7 @@ def get_default_compiler(is_post, compilers, post_pages):
     return 'rest'
 
 
-def get_date(schedule=False, rule=None, last_date=None, force_today=False, tz=None, iso8601=False):
+def get_date(schedule=False, rule=None, last_date=None, tz=None, iso8601=False):
     """Returns a date stamp, given a recurrence rule.
 
     schedule - bool:
@@ -95,10 +95,6 @@ def get_date(schedule=False, rule=None, last_date=None, force_today=False, tz=No
 
     last_date - datetime:
         timestamp of the last post
-
-    force_today - bool:
-        tries to schedule a post to today, if possible, even if the scheduled
-        time has already passed in the day.
 
     tz - tzinfo:
         the timezone used for getting the current time.
@@ -120,13 +116,10 @@ def get_date(schedule=False, rule=None, last_date=None, force_today=False, tz=No
             rrule = None  # NOQA
     if schedule and rrule and rule:
         try:
-            rule_ = rrule.rrulestr(rule, dtstart=last_date)
+            rule_ = rrule.rrulestr(rule, dtstart=last_date or date)
         except Exception:
             LOGGER.error('Unable to parse rule string, using current time.')
         else:
-            # Try to post today, instead of tomorrow, if no other post today.
-            if force_today:
-                now = now.replace(hour=0, minute=0, second=0, microsecond=0)
             date = rule_.after(max(now, last_date or now), last_date is None)
 
     offset = tz.utcoffset(now)
@@ -135,16 +128,13 @@ def get_date(schedule=False, rule=None, last_date=None, force_today=False, tz=No
     offset_min = offset_sec % 3600
     if iso8601:
         tz_str = '{0:+03d}:{1:02d}'.format(offset_hrs, offset_min // 60)
-        return date.strftime('%Y-%m-%dT%T') + tz_str
     else:
         if offset:
             tz_str = ' UTC{0:+03d}:{1:02d}'.format(offset_hrs, offset_min // 60)
         else:
             tz_str = ' UTC'
-        return date.strftime('{0} {1}'.format(
-            locale.nl_langinfo(locale.D_FMT),
-            locale.nl_langinfo(locale.T_FMT),
-        )) + tz_str
+
+    return date.strftime('%Y-%m-%d %H:%M:%S') + tz_str
 
 
 class CommandNewPost(Command):
@@ -190,6 +180,13 @@ class CommandNewPost(Command):
             'type': bool,
             'default': False,
             'help': 'Create the post with separate metadata (two file format)'
+        },
+        {
+            'name': 'edit',
+            'short': 'e',
+            'type': bool,
+            'default': False,
+            'help': 'Open the post (and meta file, if any) in $EDITOR after creation.'
         },
         {
             'name': 'content_format',
@@ -266,16 +263,18 @@ class CommandNewPost(Command):
 
         print("Creating New {0}".format(content_type.title()))
         print("-----------------\n")
-        if title is None:
-            inpf = raw_input if sys.version_info[0] == 2 else input
-            title = inpf("Enter title: ").strip()
-        else:
+        if title is not None:
             print("Title:", title)
+        else:
+            while not title:
+                title = utils.ask('Title')
+
         if isinstance(title, utils.bytes_str):
             try:
                 title = title.decode(sys.stdin.encoding)
-            except AttributeError:  # for tests
+            except (AttributeError, TypeError):  # for tests
                 title = title.decode('utf-8')
+
         title = title.strip()
         if not path:
             slug = utils.slugify(title)
@@ -283,17 +282,16 @@ class CommandNewPost(Command):
             if isinstance(path, utils.bytes_str):
                 try:
                     path = path.decode(sys.stdin.encoding)
-                except AttributeError:  # for tests
+                except (AttributeError, TypeError):  # for tests
                     path = path.decode('utf-8')
             slug = utils.slugify(os.path.splitext(os.path.basename(path))[0])
         # Calculate the date to use for the content
         schedule = options['schedule'] or self.site.config['SCHEDULE_ALL']
         rule = self.site.config['SCHEDULE_RULE']
-        force_today = self.site.config['SCHEDULE_FORCE_TODAY']
         self.site.scan_posts()
         timeline = self.site.timeline
         last_date = None if not timeline else timeline[0].date
-        date = get_date(schedule, rule, last_date, force_today, self.site.tzinfo, self.site.config['FORCE_ISO8601'])
+        date = get_date(schedule, rule, last_date, self.site.tzinfo, self.site.config['FORCE_ISO8601'])
         data = {
             'title': title,
             'slug': slug,
@@ -334,12 +332,20 @@ class CommandNewPost(Command):
         event = dict(path=txt_path)
 
         if not onefile:  # write metadata file
-            with codecs.open(meta_path, "wb+", "utf8") as fd:
+            with io.open(meta_path, "w+", encoding="utf8") as fd:
                 fd.write(utils.write_metadata(data))
-            with codecs.open(txt_path, "wb+", "utf8") as fd:
-                fd.write("Write your {0} here.".format(content_type))
             LOGGER.info("Your {0}'s metadata is at: {1}".format(content_type, meta_path))
             event['meta_path'] = meta_path
         LOGGER.info("Your {0}'s text is at: {1}".format(content_type, txt_path))
 
         signal('new_' + content_type).send(self, **event)
+
+        if options['edit']:
+            editor = os.getenv('EDITOR', '').split()
+            to_run = editor + [txt_path]
+            if not onefile:
+                to_run.append(meta_path)
+            if editor:
+                subprocess.call(to_run)
+            else:
+                LOGGER.error('$EDITOR not set, cannot edit the post.  Please do it manually.')

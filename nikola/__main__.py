@@ -44,6 +44,7 @@ from doit.cmd_run import Run as DoitRun
 from doit.cmd_clean import Clean as DoitClean
 from doit.cmd_auto import Auto as DoitAuto
 from logbook import NullHandler
+from blinker import signal
 
 from . import __version__
 from .plugin_categories import Command
@@ -55,14 +56,8 @@ config = {}
 
 def main(args=None):
     colorful = False
-    if sys.stderr.isatty():
+    if sys.stderr.isatty() and os.name != 'nt':
         colorful = True
-        try:
-            import colorama
-            colorama.init()
-        except ImportError:
-            if os.name == 'nt':
-                colorful = False
 
     ColorfulStderrHandler._colorful = colorful
 
@@ -83,8 +78,7 @@ def main(args=None):
     # the output of that command (the new site) in an unknown directory that is
     # not the current working directory.  (does not apply to `version`)
     argname = args[0] if len(args) > 0 else None
-    # FIXME there are import plugins in the repo, so how do we handle this?
-    if argname not in ['init', 'version'] and not argname.startswith('import_'):
+    if argname and argname not in ['init', 'version'] and not argname.startswith('import_'):
         root = get_root_dir()
         if root:
             os.chdir(root)
@@ -96,8 +90,8 @@ def main(args=None):
         config = conf.__dict__
     except Exception:
         if os.path.exists('conf.py'):
-            msg = traceback.format_exc(0).splitlines()[1]
-            LOGGER.error('In conf.py line {0}: {1}'.format(sys.exc_info()[2].tb_lineno, msg))
+            msg = traceback.format_exc(0)
+            LOGGER.error('conf.py cannot be parsed.\n{0}'.format(msg))
             sys.exit(1)
         config = {}
 
@@ -112,8 +106,14 @@ def main(args=None):
         except ImportError:
             req_missing(['freezegun'], 'perform invariant builds')
 
+    if config:
+        if os.path.exists('plugins') and not os.path.exists('plugins/__init__.py'):
+            with open('plugins/__init__.py', 'w') as fh:
+                fh.write('# Plugin modules go here.')
+
     config['__colorful__'] = colorful
     config['__invariant__'] = invariant
+    config['__quiet__'] = quiet
 
     site = Nikola(**config)
     _ = DoitNikola(site, quiet).run(args)
@@ -211,6 +211,7 @@ class NikolaTaskLoader(TaskLoader):
         else:
             DOIT_CONFIG = {
                 'reporter': ExecutedOnlyReporter,
+                'outfile': sys.stderr,
             }
         DOIT_CONFIG['default_tasks'] = ['render_site', 'post_render']
         tasks = generate_tasks(
@@ -219,6 +220,7 @@ class NikolaTaskLoader(TaskLoader):
         latetasks = generate_tasks(
             'post_render',
             self.nikola.gen_tasks('post_render', "LateTask", 'Group of tasks to be executes after site is rendered.'))
+        signal('initialized').send(self.nikola)
         return tasks + latetasks, DOIT_CONFIG
 
 
@@ -236,7 +238,7 @@ class DoitNikola(DoitMain):
         # core doit commands
         cmds = DoitMain.get_commands(self)
         # load nikola commands
-        for name, cmd in self.nikola.commands.items():
+        for name, cmd in self.nikola._commands.items():
             cmds[name] = cmd
         return cmds
 
@@ -269,11 +271,12 @@ class DoitNikola(DoitMain):
         if args[0] not in sub_cmds.keys():
             LOGGER.error("Unknown command {0}".format(args[0]))
             return False
-        if not isinstance(sub_cmds[args[0]], Command):  # Is a doit command
+        if not isinstance(sub_cmds[args[0]], (Command, Help)):  # Is a doit command
             if not self.nikola.configured:
                 LOGGER.error("This command needs to run inside an "
                              "existing Nikola site.")
                 return False
+
         return super(DoitNikola, self).run(cmd_args)
 
     @staticmethod

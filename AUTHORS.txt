@@ -1,5 +1,5 @@
 These are the people who have committed code according to GitHub.
-There is probably someone missing if he send me code directly, and
+There is probably someone missing if he sent me code directly, and
 for that I am sorry because I believe in giving credit.
 If you are here and prefer to be listed in a different way, just
 do a PR :-)
@@ -7,10 +7,12 @@ do a PR :-)
                                                 -- Roberto Alsina
 
 
+Alberto Berti <https://github.com/azazel75>
 Aru Sahni <https://github.com/arusahni>
 Bluerise <https://github.com/Bluerise>
 Chris “Kwpolska” Warrick <https://github.com/Kwpolska>
 Daniel Aleksandersen <https://github.com/Aeyoun>
+Dmitry Verkhoturov <https://github.com/paskal>
 DoctorMalboro <https://github.com/DoctorMalboro>
 Eduardo Schettino <https://github.com/schettino72>
 Evgeni Golov <https://github.com/evgeni>
@@ -20,6 +22,7 @@ Ondřej Grover <https://github.com/smartass101>
 Raimon Esteve <https://github.com/raimonesteve>
 Roberto Alsina <https://github.com/ralsina>
 Roman Imankulov <https://github.com/imankulov>
+Sean Pue <https://github.com/seanpue>
 StyXman <https://github.com/StyXman>
 Tim Chase <https://github.com/Gumnos>
 Tordek <https://github.com/Tordek>
@@ -29,7 +32,7 @@ agustinhenze <https://github.com/agustinhenze>
 areski <https://github.com/areski>
 bwhmather <https://github.com/bwhmather>
 camboris <https://github.com/camboris>
-claxo <https://github.com/claxo>
+Claudio Canepa <https://github.com/ccanepa>
 clee <https://github.com/clee>
 damianavila <https://github.com/damianavila>
 dastagg <https://github.com/dastagg>
@@ -58,8 +61,8 @@ notfoss <https://github.com/notfoss>
 numshub <https://github.com/numshub>
 onnodb <https://github.com/onnodb>
 pabluk <https://github.com/pabluk>
-paskal <https://github.com/paskal>
 punchagan <https://github.com/punchagan>
+pwm1234 <https://github.com/pwm1234>
 quijot <https://github.com/quijot>
 quodlibetor <https://github.com/quodlibetor>
 quoth <https://github.com/quoth>
@@ -70,3 +73,6 @@ tolusonaike <https://github.com/tolusonaike>
 Thomas Burette <https://github.com/tburette>
 wimpr1m <https://github.com/wimpr1m>
 yarko <https://github.com/yarko>
+Alex Walters <https://github.com/tritium21>
+Carsten Grohmann <https://github.com/CarstenGrohmann>
+Aurelien Naldi <https://github.com/aurelien-naldi>

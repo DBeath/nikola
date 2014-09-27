@@ -5,18 +5,20 @@
 # Translators:
 # Translators:
 # Translators:
+# Translators:
 # Alessandro Pisa <alessandro.pisa@gmail.com>, 2013
+# Chris Warrick <kwpolska@gmail.com>, 2014
 # David Paleino <d.paleino@gmail.com>, 2013
-# ralsina <ralsina@netmanagers.com.ar>, 2013
-# ralsina <ralsina@netmanagers.com.ar>, 2013
+# Roberto Alsina <ralsina@netmanagers.com.ar>, 2013
+# Roberto Alsina <ralsina@netmanagers.com.ar>, 2013
 # Stefano Karapetsas <stefano@karapetsas.com>, 2014
 msgid ""
 msgstr ""
 "Project-Id-Version: Nikola\n"
 "Report-Msgid-Bugs-To: ralsina@netmanagers.com.ar\n"
 "POT-Creation-Date: 2013-03-15 12:24-0300\n"
-"PO-Revision-Date: 2014-04-17 14:46+0000\n"
-"Last-Translator: Kwpolska <kwpolska@gmail.com>\n"
+"PO-Revision-Date: 2014-07-31 12:30+0000\n"
+"Last-Translator: Chris Warrick <kwpolska@gmail.com>\n"
 "Language-Team: Italian (http://www.transifex.com/projects/p/nikola/language/it/)\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -40,10 +42,10 @@ msgid "Tags and Categories"
 msgstr "Tags e Categorie"
 
 msgid "Comments"
-msgstr ""
+msgstr "Commenti"
 
 msgid "Read more"
-msgstr "Espandi"
+msgstr "Continua la lettura"
 
 msgid "Posts about %s"
 msgstr "Articoli su %s"
@@ -78,7 +80,7 @@ msgid "Also available in:"
 msgstr "Anche disponibile in:"
 
 msgid "Languages:"
-msgstr ""
+msgstr "Lingue:"
 
 msgid "Original site"
 msgstr "Sito originale"
@@ -90,7 +92,7 @@ msgid "Archive"
 msgstr "Archivio"
 
 msgid "Publication date"
-msgstr ""
+msgstr "Data di pubblicazione"
 
 msgid "Posted:"
 msgstr "Pubblicato:"
@@ -105,7 +107,10 @@ msgid "No posts found."
 msgstr "Nessun articolo trovato."
 
 msgid "RSS feed"
-msgstr ""
+msgstr "Flusso RSS"
 
 msgid "%d min remaining to read"
+msgstr "ancora %d minuti"
+
+msgid "Skip to main content"
 msgstr ""

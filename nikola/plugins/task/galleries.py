@@ -25,12 +25,11 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from __future__ import unicode_literals
-import codecs
+import io
 import datetime
 import glob
 import json
 import mimetypes
-from operator import itemgetter
 import os
 try:
     from urlparse import urljoin
@@ -55,6 +54,8 @@ from nikola.plugin_categories import Task
 from nikola import utils
 from nikola.post import Post
 from nikola.utils import req_missing
+
+_image_size_cache = {}
 
 
 class Galleries(Task):
@@ -103,6 +104,7 @@ class Galleries(Task):
             'feed_length': self.site.config['FEED_LENGTH'],
             'tzinfo': self.site.tzinfo,
             'comments_in_galleries': self.site.config['COMMENTS_IN_GALLERIES'],
+            'generate_rss': self.site.config['GENERATE_RSS'],
         }
 
         for k, v in self.site.GLOBAL_CONTEXT['template_hooks'].items():
@@ -153,12 +155,18 @@ class Galleries(Task):
 
             # Create index.html for each language
             for lang in self.kw['translations']:
+                # save navigation links as dependencies
+                self.kw['navigation_links|{0}'.format(lang)] = self.kw['global_context']['navigation_links'](lang)
+
                 dst = os.path.join(
                     self.kw['output_folder'],
                     self.site.path(
                         "gallery",
                         os.path.relpath(gallery, self.kw['gallery_path']), lang))
                 dst = os.path.normpath(dst)
+
+                for k in self.site._GLOBAL_CONTEXT_TRANSLATABLE:
+                    self.kw[k] = self.site.GLOBAL_CONTEXT[k](lang)
 
                 context = {}
                 context["lang"] = lang
@@ -193,7 +201,7 @@ class Galleries(Task):
                         ft = folder
                     folders.append((folder, ft))
 
-                context["folders"] = natsort.natsorted(folders, key=itemgetter(1))
+                context["folders"] = natsort.natsorted(folders)
                 context["crumbs"] = crumbs
                 context["permalink"] = self.site.link(
                     "gallery", os.path.basename(
@@ -241,33 +249,34 @@ class Galleries(Task):
                 }, self.kw['filters'])
 
                 # RSS for the gallery
-                rss_dst = os.path.join(
-                    self.kw['output_folder'],
-                    self.site.path(
-                        "gallery_rss",
-                        os.path.relpath(gallery, self.kw['gallery_path']), lang))
-                rss_dst = os.path.normpath(rss_dst)
+                if self.kw["generate_rss"]:
+                    rss_dst = os.path.join(
+                        self.kw['output_folder'],
+                        self.site.path(
+                            "gallery_rss",
+                            os.path.relpath(gallery, self.kw['gallery_path']), lang))
+                    rss_dst = os.path.normpath(rss_dst)
 
-                yield utils.apply_filters({
-                    'basename': self.name,
-                    'name': rss_dst,
-                    'file_dep': file_dep,
-                    'targets': [rss_dst],
-                    'actions': [
-                        (self.gallery_rss, (
-                            image_list,
-                            img_titles,
-                            lang,
-                            self.site.link(
-                                "gallery_rss", os.path.basename(gallery), lang),
-                            rss_dst,
-                            context['title']
-                        ))],
-                    'clean': True,
-                    'uptodate': [utils.config_changed({
-                        1: self.kw,
-                    })],
-                }, self.kw['filters'])
+                    yield utils.apply_filters({
+                        'basename': self.name,
+                        'name': rss_dst,
+                        'file_dep': file_dep,
+                        'targets': [rss_dst],
+                        'actions': [
+                            (self.gallery_rss, (
+                                image_list,
+                                img_titles,
+                                lang,
+                                self.site.link(
+                                    "gallery_rss", os.path.basename(gallery), lang),
+                                rss_dst,
+                                context['title']
+                            ))],
+                        'clean': True,
+                        'uptodate': [utils.config_changed({
+                            1: self.kw,
+                        })],
+                    }, self.kw['filters'])
 
     def find_galleries(self):
         """Find all galleries to be processed according to conf.py"""
@@ -456,8 +465,11 @@ class Galleries(Task):
 
         photo_array = []
         for img, thumb, title in zip(img_list, thumbs, img_titles):
-            im = Image.open(thumb)
-            w, h = im.size
+            w, h = _image_size_cache.get(thumb, (None, None))
+            if w is None:
+                im = Image.open(thumb)
+                w, h = im.size
+                _image_size_cache[thumb] = w, h
             # Thumbs are files in output, we need URLs
             photo_array.append({
                 'url': url_from_path(img),
@@ -508,10 +520,13 @@ class Galleries(Task):
             generator='http://getnikola.com/',
             language=lang
         )
+
         rss_obj.rss_attrs["xmlns:dc"] = "http://purl.org/dc/elements/1.1/"
+        rss_obj.self_url = make_url(permalink)
+        rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
         dst_dir = os.path.dirname(output_path)
         utils.makedirs(dst_dir)
-        with codecs.open(output_path, "wb+", "utf-8") as rss_file:
+        with io.open(output_path, "w+", encoding="utf-8") as rss_file:
             data = rss_obj.to_xml(encoding='utf-8')
             if isinstance(data, utils.bytes_str):
                 data = data.decode('utf-8')

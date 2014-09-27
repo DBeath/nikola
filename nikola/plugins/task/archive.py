@@ -77,11 +77,11 @@ class Archive(Task):
                     post_list.reverse()
                     context["posts"] = post_list
                 else:  # Monthly archives, just list the months
-                    months = set([m.split('/')[1] for m in self.site.posts_per_month.keys() if m.startswith(str(year))])
+                    months = set([(m.split('/')[1], self.site.link("archive", m, lang)) for m in self.site.posts_per_month.keys() if m.startswith(str(year))])
                     months = sorted(list(months))
                     months.reverse()
                     template_name = "list.tmpl"
-                    context["items"] = [[nikola.utils.LocaleBorg().get_month_name(int(month), lang), month] for month in months]
+                    context["items"] = [[nikola.utils.LocaleBorg().get_month_name(int(month), lang), link] for month, link in months]
                     post_list = []
                 task = self.site.generic_post_list_renderer(
                     lang,
@@ -92,7 +92,12 @@ class Archive(Task):
                     context,
                 )
                 n = len(post_list) if 'posts' in context else len(months)
-                task_cfg = {1: task['uptodate'][0].config, 2: kw, 3: n}
+
+                deps_translatable = {}
+                for k in self.site._GLOBAL_CONTEXT_TRANSLATABLE:
+                    deps_translatable[k] = self.site.GLOBAL_CONTEXT[k](lang)
+
+                task_cfg = {1: task['uptodate'][0].config, 2: kw, 3: n, 4: deps_translatable}
                 task['uptodate'] = [config_changed(task_cfg)]
                 task['basename'] = self.name
                 yield task

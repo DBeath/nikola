@@ -25,7 +25,7 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from __future__ import print_function, unicode_literals
-import codecs
+import io
 from collections import defaultdict
 from copy import copy
 from pkg_resources import resource_filename
@@ -34,6 +34,7 @@ import glob
 import locale
 import os
 import sys
+import mimetypes
 try:
     from urlparse import urlparse, urlsplit, urljoin
 except ImportError:
@@ -133,7 +134,7 @@ LEGAL_VALUES = {
         'pt': 'pt_br',
         'zh': 'zh_cn'
     },
-    'RTL_LANGUAGES': ('fa', 'ur'),
+    'RTL_LANGUAGES': ('ar', 'fa', 'ur'),
     'COLORBOX_LOCALES': defaultdict(
         str,
         bg='bg',
@@ -161,6 +162,16 @@ LEGAL_VALUES = {
         zh_cn='zh-CN'
     )
 }
+
+
+def _enclosure(post, lang):
+    '''Default implementation of enclosures'''
+    enclosure = post.meta('enclosure', lang)
+    if enclosure:
+        length = 0
+        url = enclosure
+        mime = mimetypes.guess_type(url)[0]
+        return url, length, mime
 
 
 class Nikola(object):
@@ -197,6 +208,7 @@ class Nikola(object):
         self.loghandlers = []
         self.colorful = config.pop('__colorful__', False)
         self.invariant = config.pop('__invariant__', False)
+        self.quiet = config.pop('__quiet__', False)
         self.configured = bool(config)
 
         self.template_hooks = {
@@ -243,7 +255,7 @@ class Nikola(object):
             'DATE_FORMAT': '%Y-%m-%d %H:%M',
             'DEFAULT_LANG': "en",
             'DEPLOY_COMMANDS': [],
-            'DISABLED_PLUGINS': (),
+            'DISABLED_PLUGINS': [],
             'EXTRA_PLUGINS_DIRS': [],
             'COMMENT_SYSTEM_ID': 'nikolademo',
             'EXTRA_HEAD_DATA': '',
@@ -288,6 +300,7 @@ class Nikola(object):
             'RSS_READ_MORE_LINK': DEFAULT_RSS_READ_MORE_LINK,
             'REDIRECTIONS': [],
             'ROBOTS_EXCLUSIONS': [],
+            'GENERATE_RSS': True,
             'RSS_LINK': None,
             'RSS_PATH': '',
             'RSS_PLAIN': False,
@@ -311,17 +324,18 @@ class Nikola(object):
             'THEME_REVEAL_CONFIG_SUBTHEME': 'sky',
             'THEME_REVEAL_CONFIG_TRANSITION': 'cube',
             'THUMBNAIL_SIZE': 180,
+            'UNSLUGIFY_TITLES': False,  # WARNING: conf.py.in overrides this with True for backwards compatibility
             'URL_TYPE': 'rel_path',
             'USE_BUNDLES': True,
             'USE_CDN': False,
             'USE_FILENAME_AS_TITLE': True,
             'USE_OPEN_GRAPH': True,
+            'USE_SLUGIFY': True,
             'TIMEZONE': 'UTC',
             'DEPLOY_DRAFTS': True,
             'DEPLOY_FUTURE': False,
             'SCHEDULE_ALL': False,
             'SCHEDULE_RULE': '',
-            'SCHEDULE_FORCE_TODAY': False,
             'LOGGING_HANDLERS': {'stderr': {'loglevel': 'WARNING', 'bubble': True}},
             'DEMOTE_HEADERS': 1,
         }
@@ -340,6 +354,7 @@ class Nikola(object):
 
         self.config['__colorful__'] = self.colorful
         self.config['__invariant__'] = self.invariant
+        self.config['__quiet__'] = self.quiet
 
         # Make sure we have sane NAVIGATION_LINKS.
         if not self.config['NAVIGATION_LINKS']:
@@ -385,6 +400,9 @@ class Nikola(object):
         # Handle CONTENT_FOOTER properly.
         # We provide the arguments to format in CONTENT_FOOTER_FORMATS.
         self.config['CONTENT_FOOTER'].langformat(self.config['CONTENT_FOOTER_FORMATS'])
+
+        # propagate USE_SLUGIFY
+        utils.USE_SLUGIFY = self.config['USE_SLUGIFY']
 
         # Make sure we have pyphen installed if we are using it
         if self.config.get('HYPHENATE') and pyphen is None:
@@ -448,6 +466,14 @@ class Nikola(object):
             utils.LOGGER.warn('The moot comment system has been renamed to muut by the upstream.  Setting COMMENT_SYSTEM to "muut".')
             self.config['COMMENT_SYSTEM'] = 'muut'
 
+        # Disable RSS.  For a successful disable, we must have both the option
+        # false and the plugin disabled through the official means.
+        if 'generate_rss' in self.config['DISABLED_PLUGINS'] and self.config['GENERATE_RSS'] is True:
+            self.config['GENERATE_RSS'] = False
+
+        if not self.config['GENERATE_RSS'] and 'generate_rss' not in self.config['DISABLED_PLUGINS']:
+            self.config['DISABLED_PLUGINS'].append('generate_rss')
+
         # PRETTY_URLS defaults to enabling STRIP_INDEXES unless explicitly disabled
         if self.config.get('PRETTY_URLS') and 'STRIP_INDEXES' not in config:
             self.config['STRIP_INDEXES'] = True
@@ -458,19 +484,19 @@ class Nikola(object):
         self.default_lang = self.config['DEFAULT_LANG']
         self.translations = self.config['TRANSLATIONS']
 
-        locale_fallback, locale_default, locales = sanitized_locales(
-                                    self.config.get('LOCALE_FALLBACK', None),
-                                    self.config.get('LOCALE_DEFAULT', None),
-                                    self.config.get('LOCALES', {}),
-                                    self.translations)  # NOQA
-        utils.LocaleBorg.initialize(locales, self.default_lang)
+        if self.configured:
+            locale_fallback, locale_default, locales = sanitized_locales(
+                self.config.get('LOCALE_FALLBACK', None),
+                self.config.get('LOCALE_DEFAULT', None),
+                self.config.get('LOCALES', {}), self.translations)
+            utils.LocaleBorg.initialize(locales, self.default_lang)
 
         # BASE_URL defaults to SITE_URL
         if 'BASE_URL' not in self.config:
             self.config['BASE_URL'] = self.config.get('SITE_URL')
         # BASE_URL should *always* end in /
         if self.config['BASE_URL'] and self.config['BASE_URL'][-1] != '/':
-            utils.LOGGER.warn("Your BASE_URL doesn't end in / -- adding it.")
+            utils.LOGGER.warn("Your BASE_URL doesn't end in / -- adding it, but please fix it in your config file!")
 
         # We use one global tzinfo object all over Nikola.
         self.tzinfo = dateutil.tz.gettz(self.config['TIMEZONE'])
@@ -516,7 +542,7 @@ class Nikola(object):
         # Emit signal for SignalHandlers which need to start running immediately.
         signal('sighandlers_loaded').send(self)
 
-        self.commands = {}
+        self._commands = {}
         # Activate all command plugins
         for plugin_info in self.plugin_manager.getPluginsOfCategory("Command"):
             if plugin_info.name in self.config['DISABLED_PLUGINS']:
@@ -526,7 +552,7 @@ class Nikola(object):
             self.plugin_manager.activatePluginByName(plugin_info.name)
             plugin_info.plugin_object.set_site(self)
             plugin_info.plugin_object.short_help = plugin_info.description
-            self.commands[plugin_info.name] = plugin_info.plugin_object
+            self._commands[plugin_info.name] = plugin_info.plugin_object
 
         # Activate all task plugins
         for task_type in ["Task", "LateTask"]:
@@ -567,7 +593,10 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['url_type'] = self.config['URL_TYPE']
         self._GLOBAL_CONTEXT['timezone'] = self.tzinfo
         self._GLOBAL_CONTEXT['_link'] = self.link
-        self._GLOBAL_CONTEXT['set_locale'] = utils.LocaleBorg().set_locale
+        try:
+            self._GLOBAL_CONTEXT['set_locale'] = utils.LocaleBorg().set_locale
+        except utils.LocaleBorgUninitializedException:
+            self._GLOBAL_CONTEXT['set_locale'] = None
         self._GLOBAL_CONTEXT['rel_link'] = self.rel_link
         self._GLOBAL_CONTEXT['abs_link'] = self.abs_link
         self._GLOBAL_CONTEXT['exists'] = self.file_exists
@@ -605,6 +634,7 @@ class Nikola(object):
         self._GLOBAL_CONTEXT['transition'] = self.config.get('THEME_REVEAL_CONFIG_TRANSITION')
         self._GLOBAL_CONTEXT['content_footer'] = self.config.get(
             'CONTENT_FOOTER')
+        self._GLOBAL_CONTEXT['generate_rss'] = self.config.get('GENERATE_RSS')
         self._GLOBAL_CONTEXT['rss_path'] = self.config.get('RSS_PATH')
         self._GLOBAL_CONTEXT['rss_link'] = self.config.get('RSS_LINK')
 
@@ -620,6 +650,7 @@ class Nikola(object):
             'SHOW_SOURCELINK')
         self._GLOBAL_CONTEXT['extra_head_data'] = self.config.get('EXTRA_HEAD_DATA')
         self._GLOBAL_CONTEXT['colorbox_locales'] = LEGAL_VALUES['COLORBOX_LOCALES']
+        self._GLOBAL_CONTEXT['url_replacer'] = self.url_replacer
 
         self._GLOBAL_CONTEXT.update(self.config.get('GLOBAL_CONTEXT', {}))
 
@@ -631,6 +662,7 @@ class Nikola(object):
                 "PageCompiler"):
             self.compilers[plugin_info.name] = \
                 plugin_info.plugin_object
+
         signal('configured').send(self)
 
     def _get_themes(self):
@@ -850,6 +882,10 @@ class Nikola(object):
         if not result:
             result = "."
 
+        # Don't forget the query part of the link
+        if parsed_dst.query:
+            result += "?" + parsed_dst.query
+
         # Don't forget the fragment (anchor) part of the link
         if parsed_dst.fragment:
             result += "#" + parsed_dst.fragment
@@ -859,10 +895,10 @@ class Nikola(object):
         return result
 
     def generic_rss_renderer(self, lang, title, link, description, timeline, output_path,
-                             rss_teasers, rss_plain, feed_length=10, feed_url=None, enclosure=None):
+                             rss_teasers, rss_plain, feed_length=10, feed_url=None, enclosure=_enclosure):
 
         """Takes all necessary data, and renders a RSS feed in output_path."""
-        rss_obj = rss.RSS2(
+        rss_obj = utils.ExtendedRSS2(
             title=title,
             link=link,
             description=description,
@@ -870,6 +906,9 @@ class Nikola(object):
             generator='http://getnikola.com/',
             language=lang
         )
+
+        if feed_url:
+            rss_obj.xsl_stylesheet_href = self.url_replacer(feed_url, "/assets/xml/rss.xsl")
 
         items = []
 
@@ -912,23 +951,21 @@ class Nikola(object):
             if post.author(lang):
                 rss_obj.rss_attrs["xmlns:dc"] = "http://purl.org/dc/elements/1.1/"
 
-            """ Enclosure callback must returns tuple """
-            if enclosure:
-                download_link, download_size, download_type = enclosure(post=post, lang=lang)
-
-                args['enclosure'] = rss.Enclosure(
-                    download_link,
-                    download_size,
-                    download_type,
-                )
+            # enclosure callback returns None if post has no enclosure, or a
+            # 3-tuple of (url, length (0 is valid), mimetype)
+            enclosure_details = enclosure(post=post, lang=lang)
+            if enclosure_details is not None:
+                args['enclosure'] = rss.Enclosure(*enclosure_details)
 
             items.append(utils.ExtendedItem(**args))
 
         rss_obj.items = items
+        rss_obj.self_url = feed_url
+        rss_obj.rss_attrs["xmlns:atom"] = "http://www.w3.org/2005/Atom"
 
         dst_dir = os.path.dirname(output_path)
         utils.makedirs(dst_dir)
-        with codecs.open(output_path, "wb+", "utf-8") as rss_file:
+        with io.open(output_path, "w+", encoding="utf-8") as rss_file:
             data = rss_obj.to_xml(encoding='utf-8')
             if isinstance(data, utils.bytes_str):
                 data = data.decode('utf-8')
@@ -1111,6 +1148,10 @@ class Nikola(object):
         if self._scanned and not really:
             return
 
+        try:
+            self.commands = utils.Commands(self.doit)
+        except AttributeError:
+            self.commands = None
         self.global_data = {}
         self.posts = []
         self.posts_per_year = defaultdict(list)
@@ -1122,12 +1163,14 @@ class Nikola(object):
         self.pages = []
 
         seen = set([])
-        print("Scanning posts", end='', file=sys.stderr)
+        if not self.quiet:
+            print("Scanning posts", end='', file=sys.stderr)
         slugged_tags = set([])
         quit = False
         for wildcard, destination, template_name, use_in_feeds in \
                 self.config['post_pages']:
-            print(".", end='', file=sys.stderr)
+            if not self.quiet:
+                print(".", end='', file=sys.stderr)
             dirname = os.path.dirname(wildcard)
             for dirpath, _, _ in os.walk(dirname, followlinks=True):
                 dest_dir = os.path.normpath(os.path.join(destination,
@@ -1180,16 +1223,17 @@ class Nikola(object):
                         self.posts_per_month[
                             '{0}/{1:02d}'.format(post.date.year, post.date.month)].append(post)
                         for tag in post.alltags:
-                            if utils.slugify(tag) in slugged_tags:
+                            _tag_slugified = utils.slugify(tag)
+                            if _tag_slugified in slugged_tags:
                                 if tag not in self.posts_per_tag:
                                     # Tags that differ only in case
-                                    other_tag = [k for k in self.posts_per_tag.keys() if k.lower() == tag.lower()][0]
+                                    other_tag = [existing for existing in self.posts_per_tag.keys() if utils.slugify(existing) == _tag_slugified][0]
                                     utils.LOGGER.error('You have tags that are too similar: {0} and {1}'.format(tag, other_tag))
                                     utils.LOGGER.error('Tag {0} is used in: {1}'.format(tag, post.source_path))
                                     utils.LOGGER.error('Tag {0} is used in: {1}'.format(other_tag, ', '.join([p.source_path for p in self.posts_per_tag[other_tag]])))
                                     quit = True
                             else:
-                                slugged_tags.add(utils.slugify(tag))
+                                slugged_tags.add(utils.slugify(tag, force=True))
                             self.posts_per_tag[tag].append(post)
                         self.posts_per_category[post.meta('category')].append(post)
                     else:
@@ -1210,7 +1254,11 @@ class Nikola(object):
         for i, p in enumerate(self.posts[:-1]):
             p.prev_post = self.posts[i + 1]
         self._scanned = True
-        print("done!", file=sys.stderr)
+        if not self.quiet:
+            print("done!", file=sys.stderr)
+
+        signal('scanned').send(self)
+
         if quit:
             sys.exit(1)
 
@@ -1226,7 +1274,6 @@ class Nikola(object):
         context['title'] = post.title(lang)
         context['description'] = post.description(lang)
         context['permalink'] = post.permalink(lang)
-        context['page_list'] = self.pages
         if post.use_in_feeds:
             context['enable_comments'] = True
         else:
@@ -1247,6 +1294,11 @@ class Nikola(object):
 
         for k, v in self.GLOBAL_CONTEXT['template_hooks'].items():
             deps_dict['||template_hooks|{0}||'.format(k)] = v._items
+
+        for k in self._GLOBAL_CONTEXT_TRANSLATABLE:
+            deps_dict[k] = deps_dict['global'][k](lang)
+
+        deps_dict['navigation_links'] = deps_dict['global']['navigation_links'](lang)
 
         if post:
             deps_dict['post_translations'] = post.translated_to
@@ -1286,6 +1338,11 @@ class Nikola(object):
         for k, v in self.GLOBAL_CONTEXT['template_hooks'].items():
             deps_context['||template_hooks|{0}||'.format(k)] = v._items
 
+        for k in self._GLOBAL_CONTEXT_TRANSLATABLE:
+            deps_context[k] = deps_context['global'][k](lang)
+
+        deps_context['navigation_links'] = deps_context['global']['navigation_links'](lang)
+
         task = {
             'name': os.path.normpath(output_name),
             'targets': [output_name],
@@ -1299,7 +1356,7 @@ class Nikola(object):
         return utils.apply_filters(task, filters)
 
     def __repr__(self):
-        return '<Nikola Site: {0}>'.format(self.config['BLOG_TITLE']())
+        return '<Nikola Site: {0!r}>'.format(self.config['BLOG_TITLE']())
 
 
 def sanitized_locales(locale_fallback, locale_default, locales, translations):

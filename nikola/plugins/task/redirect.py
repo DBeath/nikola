@@ -24,7 +24,9 @@
 # OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import codecs
+from __future__ import unicode_literals
+
+import io
 import os
 
 from nikola.plugin_categories import Task
@@ -60,7 +62,8 @@ class Redirect(Task):
 
 def create_redirect(src, dst):
     utils.makedirs(os.path.dirname(src))
-    with codecs.open(src, "wb+", "utf8") as fd:
+    with io.open(src, "w+", encoding="utf8") as fd:
         fd.write('<!DOCTYPE html><head><title>Redirecting...</title>'
+                 '<meta name="robots" content="noindex">'
                  '<meta http-equiv="refresh" content="0; '
                  'url={0}"></head><body><p>Page moved <a href="{0}">here</a></p></body>'.format(dst))

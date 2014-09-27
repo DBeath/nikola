@@ -26,7 +26,7 @@
 
 from __future__ import unicode_literals, print_function, absolute_import
 
-import codecs
+import io
 from collections import defaultdict
 import datetime
 import os
@@ -60,6 +60,7 @@ from .utils import (
     unicode_str,
     demote_headers,
     get_translation_candidate,
+    unslugify,
 )
 from .rc4 import rc4
 
@@ -127,7 +128,7 @@ class Post(object):
         self._paragraph_count = None
         self._remaining_paragraph_count = None
 
-        default_metadata = get_meta(self, self.config['FILE_METADATA_REGEXP'])
+        default_metadata = get_meta(self, self.config['FILE_METADATA_REGEXP'], self.config['UNSLUGIFY_TITLES'])
 
         self.meta = Functionary(lambda: None, self.default_lang)
         self.meta[self.default_lang] = default_metadata
@@ -139,7 +140,7 @@ class Post(object):
             if lang != self.default_lang:
                 meta = defaultdict(lambda: '')
                 meta.update(default_metadata)
-                meta.update(get_meta(self, self.config['FILE_METADATA_REGEXP'], lang))
+                meta.update(get_meta(self, self.config['FILE_METADATA_REGEXP'], self.config['UNSLUGIFY_TITLES'], lang))
                 self.meta[lang] = meta
 
         if not self.is_translation_available(self.default_lang):
@@ -317,8 +318,12 @@ class Post(object):
         deps = []
         if self.default_lang in self.translated_to:
             deps.append(self.base_path)
+            deps.append(self.source_path)
         if lang != self.default_lang:
-            deps += [get_translation_candidate(self.config, self.base_path, lang)]
+            cand_1 = get_translation_candidate(self.config, self.source_path, lang)
+            cand_2 = get_translation_candidate(self.config, self.base_path, lang)
+            if os.path.exists(cand_1):
+                deps.extend([cand_1, cand_2])
         return deps
 
     def compile(self, lang):
@@ -326,10 +331,10 @@ class Post(object):
 
         def wrap_encrypt(path, password):
             """Wrap a post with encryption."""
-            with codecs.open(path, 'rb+', 'utf8') as inf:
+            with io.open(path, 'r+', encoding='utf8') as inf:
                 data = inf.read() + "<!--tail-->"
             data = CRYPT.substitute(data=rc4(password, data))
-            with codecs.open(path, 'wb+', 'utf8') as outf:
+            with io.open(path, 'w+', encoding='utf8') as outf:
                 outf.write(data)
 
         dest = self.translated_base_path(lang)
@@ -353,7 +358,7 @@ class Post(object):
         """
         dep_path = self.base_path + '.dep'
         if os.path.isfile(dep_path):
-            with codecs.open(dep_path, 'rb+', 'utf8') as depf:
+            with io.open(dep_path, 'r+', encoding='utf8') as depf:
                 return [l.strip() for l in depf.readlines()]
         return []
 
@@ -419,8 +424,10 @@ class Post(object):
         if lang is None:
             lang = nikola.utils.LocaleBorg().current_lang
         file_name = self._translated_file_path(lang)
-        with codecs.open(file_name, "r", "utf8") as post_file:
+        with io.open(file_name, "r", encoding="utf8") as post_file:
             data = post_file.read().strip()
+        if self.compiler.extension() == '.php':
+            return data
         try:
             document = lxml.html.fragment_fromstring(data, "body")
         except lxml.etree.ParserError as e:
@@ -435,16 +442,10 @@ class Post(object):
         if self.hyphenate:
             hyphenate(document, lang)
 
-        data = lxml.html.tostring(document, encoding='unicode')
-        # data here is a full HTML doc, including HTML and BODY tags
-        # which is not ideal (Issue #464)
         try:
-            body = document.body
-            data = (body.text or '') + ''.join(
-                [lxml.html.tostring(child, encoding='unicode')
-                    for child in body.iterchildren()])
-        except IndexError:  # No body there, it happens sometimes
-            pass
+            data = lxml.html.tostring(document.body, encoding='unicode')
+        except:
+            data = lxml.html.tostring(document, encoding='unicode')
 
         if teaser_only:
             teaser = TEASER_REGEXP.split(data)[0]
@@ -466,7 +467,10 @@ class Post(object):
                             remaining_paragraph_count=self.remaining_paragraph_count)
                 # This closes all open tags and sanitizes the broken HTML
                 document = lxml.html.fromstring(teaser)
-                data = lxml.html.tostring(document, encoding='unicode')
+                try:
+                    data = lxml.html.tostring(document.body, encoding='unicode')
+                except IndexError:
+                    data = lxml.html.tostring(document, encoding='unicode')
 
         if data and strip_html:
             try:
@@ -481,9 +485,9 @@ class Post(object):
                 try:
                     document = lxml.html.fromstring(data)
                     demote_headers(document, self.demote_headers)
+                    data = lxml.html.tostring(document.body, encoding='unicode')
+                except (lxml.etree.ParserError, IndexError):
                     data = lxml.html.tostring(document, encoding='unicode')
-                except lxml.etree.ParserError:
-                    pass
 
         return data
 
@@ -514,7 +518,7 @@ class Post(object):
             # duplicated with Post.text()
             lang = nikola.utils.LocaleBorg().current_lang
             file_name = self._translated_file_path(lang)
-            with codecs.open(file_name, "r", "utf8") as post_file:
+            with io.open(file_name, "r", encoding="utf8") as post_file:
                 data = post_file.read().strip()
             try:
                 document = lxml.html.fragment_fromstring(data, "body")
@@ -548,9 +552,10 @@ class Post(object):
 
     def source_link(self, lang=None):
         """Return absolute link to the post's source."""
+        ext = self.source_ext(True)
         return "/" + self.destination_path(
             lang=lang,
-            extension=self.source_ext(),
+            extension=ext,
             sep='/')
 
     def destination_path(self, lang=None, extension='.html', sep=os.sep):
@@ -575,6 +580,10 @@ class Post(object):
         if lang is None:
             lang = nikola.utils.LocaleBorg().current_lang
 
+        # Let compilers override extension (e.g. the php compiler)
+        if self.compiler.extension() != '.html':
+            extension = self.compiler.extension()
+
         pieces = self.translations[lang].split(os.sep)
         pieces += self.folder.split(os.sep)
         if self._has_pretty_url(lang):
@@ -591,8 +600,33 @@ class Post(object):
         else:
             return link
 
-    def source_ext(self):
-        return os.path.splitext(self.source_path)[1]
+    @property
+    def previewimage(self, lang=None):
+        if lang is None:
+            lang = nikola.utils.LocaleBorg().current_lang
+
+        image_path = self.meta[lang]['previewimage']
+
+        if not image_path:
+            return None
+
+        return urljoin(self.base_url, image_path)
+
+    def source_ext(self, prefix=False):
+        """
+        Return the source file extension.
+
+        If `prefix` is True, a `.src.` prefix will be added to the resulting extension
+        if it’s equal to the destination extension.
+        """
+
+        ext = os.path.splitext(self.source_path)[1]
+        # do not publish PHP sources
+        if prefix and ext == '.html':
+            # ext starts with a dot
+            return '.src' + ext
+        else:
+            return ext
 
 # Code that fetches metadata from different places
 
@@ -612,7 +646,7 @@ def re_meta(line, match=None):
         return (None,)
 
 
-def _get_metadata_from_filename_by_regex(filename, metadata_regexp):
+def _get_metadata_from_filename_by_regex(filename, metadata_regexp, unslugify_titles):
     """
     Tries to ried the metadata from the filename based on the given re.
     This requires to use symbolic group names in the pattern.
@@ -626,7 +660,11 @@ def _get_metadata_from_filename_by_regex(filename, metadata_regexp):
     if match:
         # .items() for py3k compat.
         for key, value in match.groupdict().items():
-            meta[key.lower()] = value  # metadata must be lowercase
+            k = key.lower().strip()  # metadata must be lowercase
+            if k == 'title' and unslugify_titles:
+                meta[k] = unslugify(value, discard_numbers=False)
+            else:
+                meta[k] = value
 
     return meta
 
@@ -638,7 +676,7 @@ def get_metadata_from_file(source_path, config=None, lang=None):
             source_path = get_translation_candidate(config, source_path, lang)
         elif lang:
             source_path += '.' + lang
-        with codecs.open(source_path, "r", "utf8") as meta_file:
+        with io.open(source_path, "r", encoding="utf8") as meta_file:
             meta_data = [x.strip() for x in meta_file.readlines()]
         return _get_metadata_from_file(meta_data)
     except (UnicodeDecodeError, UnicodeEncodeError):
@@ -706,7 +744,7 @@ def get_metadata_from_meta_file(path, config=None, lang=None):
     elif lang:
         meta_path += '.' + lang
     if os.path.isfile(meta_path):
-        with codecs.open(meta_path, "r", "utf8") as meta_file:
+        with io.open(meta_path, "r", encoding="utf8") as meta_file:
             meta_data = meta_file.readlines()
 
         # Detect new-style metadata.
@@ -755,11 +793,12 @@ def get_metadata_from_meta_file(path, config=None, lang=None):
         return {}
 
 
-def get_meta(post, file_metadata_regexp=None, lang=None):
+def get_meta(post, file_metadata_regexp=None, unslugify_titles=False, lang=None):
     """Get post's meta from source.
 
     If ``file_metadata_regexp`` is given it will be tried to read
     metadata from the filename.
+    If ``unslugify_titles`` is True, the extracted title (if any) will be unslugified, as is done in galleries.
     If any metadata is then found inside the file the metadata from the
     file will override previous findings.
     """
@@ -778,7 +817,8 @@ def get_meta(post, file_metadata_regexp=None, lang=None):
 
     if file_metadata_regexp is not None:
         meta.update(_get_metadata_from_filename_by_regex(post.source_path,
-                                                         file_metadata_regexp))
+                                                         file_metadata_regexp,
+                                                         unslugify_titles))
 
     meta.update(get_metadata_from_file(post.source_path, config, lang))
 

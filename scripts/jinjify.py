@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-import codecs
+import io
 import glob
+import sys
 import os
 import re
 import json
@@ -10,7 +11,6 @@ import colorama
 import jinja2
 
 dumb_replacements = [
-    ["{% if isinstance(url, tuple) %}", "{% if url is mapping %}"],
     ["{% if any(post.is_mathjax for post in posts) %}", '{% if posts|selectattr("is_mathjax")|list %}'],
     ["json.dumps(title)", "title|tojson"],
     ["{{ parent.extra_head() }}", "{{ super() }}"],
@@ -42,7 +42,7 @@ def jinjify(in_theme, out_theme):
     lookup.loader = jinja2.FileSystemLoader([out_templates_path], encoding='utf-8')
     for template in glob.glob(os.path.join(in_templates_path, "*.tmpl")):
         out_template = os.path.join(out_templates_path, os.path.basename(template))
-        with codecs.open(template, "r", "utf-8") as inf:
+        with io.open(template, "r", encoding="utf-8") as inf:
             data = mako2jinja(inf)
 
         lines = []
@@ -55,7 +55,7 @@ def jinjify(in_theme, out_theme):
         for repl in dumber_replacements:
             data = data.replace(*repl)
 
-        with codecs.open(out_template, "wb+", "utf-8") as outf:
+        with io.open(out_template, "w+", encoding="utf-8") as outf:
             outf.write(data + '\n')
 
         # Syntax check output
@@ -212,6 +212,16 @@ def mako2jinja(input_file):
     return output
 
 if __name__ == "__main__":
-    import commandline
-    colorama.init()
-    commandline.run_as_main(jinjify)
+    if len(sys.argv) == 1:
+        print('Performing standard conversions:')
+        for m, j in (
+            ('nikola/data/themes/base', 'nikola/data/themes/base-jinja'),
+            ('nikola/data/themes/bootstrap', 'nikola/data/themes/bootstrap-jinja'),
+            ('nikola/data/themes/bootstrap3', 'nikola/data/themes/bootstrap3-jinja')
+        ):
+            print('    {0} -> {1}'.format(m, j))
+            jinjify(m, j)
+    elif len(sys.argv) != 3:
+        print('ERROR: needs input and output directory, or no arguments for default conversions.')
+    else:
+        jinjify(sys.argv[1], sys.argv[2])

@@ -1,14 +1,14 @@
 .. title: The Nikola Handbook
 .. slug: handbook
-.. date: 2012/03/30 23:00
-.. tags:
+.. date: 2012-03-30 23:00:00 UTC-03:00
+.. tags: mathjax
 .. link:
 .. description:
 
 The Nikola Handbook
 ===================
 
-:Version: 7.0.0-alpha
+:Version: 7.1.0
 
 .. class:: alert alert-info pull-right
 
@@ -20,7 +20,7 @@ All You Need to Know
 
 After you have Nikola `installed <#installing-nikola>`_:
 
-Create a empty site:
+Create a empty site (with a setup wizard):
     ``nikola init mysite``
 
 You can create a site with demo files in it with ``nikola init --demo mysite``
@@ -151,7 +151,7 @@ Cost and Performance
     probably serve a bazillion (technical term) pageviews from a phone using
     static sites.
 
-Lockin
+Lock-in
     On server-side blog platforms, sometimes you can't export your own data, or
     it's in strange formats you can't use in other services. I have switched
     blogging platforms from Advogato to PyCs to two homebrew systems, to Nikola,
@@ -180,7 +180,7 @@ If you want to create a blog or a site, Nikola provides:
 * Google sitemap generation
 * Custom deployment (if it's a command, you can use it)
 * A (very) basic look and feel you can customize, and is even text-mode friendly
-* The input format is light markup (`reStructuredText <quickstart.html>`__ or
+* The input format is light markup (`reStructuredText <http://getnikola.com/quickstart.html>`__ or
   `Markdown <http://daringfireball.net/projects/markdown/>`_)
 * Easy-to-create image galleries
 * Support for displaying source code
@@ -215,8 +215,9 @@ by doing::
 Alternatively, you can install those packages one-by-one, when required (Nikola
 will tell you what packages are needed)
 
-After that, run ``nikola init --demo sitename`` and that will create a folder called
-``sitename`` containing a functional demo site.
+After that, run ``nikola init --demo sitename`` and that will run the setup
+wizard, which will create a folder called ``sitename`` containing a functional
+demo site.
 
 Nikola is packaged for some Linux distributions, you may get that instead. e.g.
 If you are running Arch Linux, there are AUR packages, available in Python 2/3
@@ -288,7 +289,7 @@ caveats:
    pre-built packages is possible through ``virtualenv --system-site-packages``.
 #. Windows has some differences over POSIX, which may cause some features to
    work incorrectly under Windows.  If any problems occur, please do not
-   hesitate to report them.  Some of the differeces include:
+   hesitate to report them.  Some of the differences include:
 
    * ``\`` as path separator (instead of ``/``)
    * the concept of HDD partitions and letters (instead of
@@ -308,7 +309,7 @@ Those source files are later converted to HTML
 The recommended formats are reStructuredText and Markdown, but there is also support
 for textile and WikiCreole and even for just writing HTML.
 
-.. note:: There is a great `quick tutorial to learn reStructuredText. <quickstart.html>`__
+.. note:: There is a great `quick tutorial to learn reStructuredText. <http://getnikola.com/quickstart.html>`__
 
 First, let's see how you "build" your site. Nikola comes with a minimal site to get you started.
 
@@ -386,19 +387,20 @@ Nikola also has other commands besides ``build``::
       nikola doit_auto            automatically execute tasks when a dependency changes
       nikola dumpdb               dump dependency DB
       nikola forget               clear successful run status from internal DB
+      nikola github_deploy        deploy the site to GitHub pages
       nikola help                 show help
       nikola ignore               ignore task (skip) on subsequent runs
       nikola import_wordpress     import a WordPress dump
       nikola init                 create a Nikola site in the specified folder
       nikola install_theme        install theme into current site
       nikola list                 list tasks from dodo file
+      nikola new_page             create a new page in the site
       nikola new_post             create a new blog post or site page
       nikola orphans              list all orphans
       nikola plugin               manage plugins
-      nikola run                  run tasks
       nikola serve                start the test webserver
       nikola strace               use strace to list file_deps and targets
-      nikola tabcompletion        generate script for tab-complention
+      nikola tabcompletion        generate script for tab-completion
       nikola version              print the Nikola version number
 
       nikola help                 show help / reference
@@ -407,11 +409,11 @@ Nikola also has other commands besides ``build``::
 
 The ``serve`` command starts a web server so you can see the site you are creating::
 
-    $ nikola serve
+    $ nikola serve -b
     Serving HTTP on 127.0.0.1 port 8000 ...
 
 
-After you do this, you can point your web browser to http://localhost:8000 and you should see
+After you do this, a web browser opens at http://127.0.0.1:8000/ and you should see
 the sample site. This is useful as a "preview" of your work.
 
 By default, the ``serve`` command runs the web server on port 8000 on the IP address 127.0.0.1.
@@ -457,7 +459,7 @@ The content of that file is as follows::
 
     .. title: How to make money
     .. slug: how-to-make-money
-    .. date: 2012/09/15 19:52:05
+    .. date: 2012-09-15 19:52:05 UTC
     .. tags:
     .. link:
     .. description:
@@ -491,10 +493,39 @@ to your configuration::
 
    Nikola will also use other metadata fields:
 
+   author
+       Author of the post, will be used in the RSS feed and possibly in the post
+       display (theme-dependent)
+
+   annotations / noannotations
+       Override the value of the ``ANNOTATIONS`` option for this specific post or page.
+
+   category
+       Like tags, except each post can have only one, and they usually have
+       more descriptive names.
+
+   hidetitle
+       Set "True" if you do not want to see the **story** title as a
+       heading of the page (does not work for posts).
+
    nocomments
        Set to "True" to disable comments. Example::
 
            .. nocomments: True
+
+   password
+       The post will be encrypted and invisible until the reader enters the password.
+       Also, the post's sourcecode will not be available.
+
+   previewimage
+       Designate a preview or other representative image path relative to BASE_URL
+       for use with Open Graph for posts. Adds the image when sharing on social
+       media and many other uses.
+
+           .. previewimage: images/looks_great_on_facebook.png
+
+       The image can be of any size and dimension (services will crop and adapt)
+       but should less than 1 MB and be larger than 300x300 (ideally 600x600).
 
    template
        Will change the template used to render this page/post specific page. Example::
@@ -503,25 +534,6 @@ to your configuration::
 
        That template needs to either be part of the theme, or be placed in a ``templates/``
        folder inside your site.
-
-   password
-       The post will be encrypted and invisible until the reader enters the password.
-       Also, the post's sourcecode will not be available.
-
-   category
-       Like tags, except each post can have only one, and they usually have
-       more descriptive names.
-
-   annotations / noannotations
-       Override the value of the ``ANNOTATIONS`` option for this specific post or page.
-
-   author
-       Author of the post, will be used in the RSS feed and possibly in the post
-       display (theme-dependent)
-
-   hidetitle
-       Set "True" if you do not want to see the **story** title as a
-       heading of the page (does not work for posts).
 
 .. note:: The Two-File Format
 
@@ -532,7 +544,18 @@ to your configuration::
 
         How to make money
         how-to-make-money
-        2012/09/15 19:52:05
+        2012-09-15 19:52:05 UTC
+
+   However, starting with Nikola v7, you can now use ``.meta`` files and put
+   all metadata you want, complete with the explanations — they look just like
+   the beginning of our reST files.
+
+        .. title: How to make money
+        .. slug: how-to-make-money
+        .. date: 2012-09-15 19:52:05 UTC
+
+   Both file formats are supported; however, the new format is preferred, if
+   possible.
 
 If you are writing a multilingual site, you can also create a per-language
 post file (for example: ``how-to-make-money.es.txt`` with the default TRANSLATIONS_PATTERN, see below).
@@ -553,13 +576,13 @@ default set to::
 
 .. note:: Considered languages
 
-    nikola will only look for translation of input files for languages
+    Nikola will only look for translation of input files for languages
     specified in the TRANSLATIONS variable.
 
 You can edit these files with your favourite text editor, and once you are happy
 with the contents, generate the pages as explained in `Getting Started`_
 
-Currently supported languages are
+Currently supported languages are:
 
 * Basque
 * Bulgarian
@@ -575,14 +598,16 @@ Currently supported languages are
 * French
 * German
 * Greek
+* Hindi
 * Italian
 * Japanese
 * Norwegian Bokmål
 * Persian
 * Polish
-* Portuguese
+* Portuguese (Brasil)
 * Russian
-* Slovenian
+* Slovak
+* Slovene
 * Spanish
 * Turkish
 * Urdu
@@ -610,7 +635,7 @@ and ``PAGES`` configuration options::
     # From those files, a set of HTML fragment files will be generated:
     # cache/whatever/thing.html (and maybe cache/whatever/thing.html.es)
     #
-    # These files are combinated with the template to produce rendered
+    # These files are combined with the template to produce rendered
     # pages, which will be placed at
     # output / TRANSLATIONS[lang] / destination / pagename.html
     #
@@ -707,10 +732,10 @@ published immediately.  Posts dated in the future are *not* deployed by default
 deployed site, you can set ``DEPLOY_FUTURE = True`` in your configuration.
 Generally, you want FUTURE_IS_NOW and DEPLOY_FUTURE to be the same value.
 
-Retired Posts
-~~~~~~~~~~~~~
+Private (formerly retired) Posts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you add a "retired" tag to a post, then it will not be shown in indexes and feeds.
+If you add a "private" tag to a post, then it will not be shown in indexes and feeds.
 It *will* be compiled, and if you deploy it it *will* be made available, so it will
 not generate 404s for people who had linked to it.
 
@@ -754,15 +779,6 @@ you want::
 All these posts get queued up according to your schedule, but note
 that you will anyway need to build and deploy your site for the posts
 to appear online.  You can have a cron job that does this regularly.
-
-An additional setting (``SCHEDULE_FORCE_TODAY = True``) lets you tell
-Nikola to make the post today, if you run the ``new_post --schedule``
-after the scheduled hour has passed, and there is no other post
-at/after the scheduled hour.  Concretely, say, you run the ``nikola
-new_post -s`` command at 10am on a Monday (with the schedule rule set
-to the same as above), with no other post on Monday, at/after 7am,
-setting ``SCHEDULE_FORCE_TODAY = True`` will have your post scheduled
-to Monday, instead of being scheduled to Wednesday 7am.
 
 Post Types
 ~~~~~~~~~~
@@ -828,11 +844,17 @@ commented.
 You surely want to edit these options::
 
     # Data about this site
-    BLOG_TITLE = "Demo Site"
-    SITE_URL = "http://getnikola.com"
+    BLOG_AUTHOR = "Your Name"  # (translatable)
+    BLOG_TITLE = "Demo Site"  # (translatable)
+    SITE_URL = "http://getnikola.com/"
     BLOG_EMAIL = "joe@demo.site"
-    BLOG_DESCRIPTION = "This is a demo site for Nikola."
+    BLOG_DESCRIPTION = "This is a demo site for Nikola."  # (translatable)
 
+Some options are demarked with a (translatable) comment above or right next to
+them.  For those options, two types of values can be provided:
+
+ * a string, which will be used for all languages
+ * a dict of language-value pairs, to have different values in each language
 
 Customizing Your Site
 ---------------------
@@ -886,6 +908,15 @@ Navigation Links
             ),
         }
 
+    .. note::
+
+       Support for submenus is theme-dependent.  Only one level of
+       submenus is supported.
+
+    .. note::
+       Some themes, including the default Bootstrap 3 theme, may
+       present issues if the menu is too large.  (in ``bootstrap3``, the
+       navbar can grow too large and cover contents.)
 
     The ``SEARCH_FORM`` option contains the HTML code for a search form based on
     duckduckgo.com which should always work, but feel free to change it to
@@ -894,7 +925,9 @@ Navigation Links
 Footer
     ``CONTENT_FOOTER`` is displayed, small at the bottom of all pages, I use it for
     the copyright notice. The default shows a text formed using ``BLOG_AUTHOR``,
-    ``BLOG_EMAIL``, the date and ``LICENSE``.
+    ``BLOG_EMAIL``, the date and ``LICENSE``.  Note you need to use
+    ``CONTENT_FOOTER_FORMATS`` instead of regular str.format or %-formatting,
+    for compatibility with the translatable settings feature.
 
 BODY_END
     This option lets you define a HTML snippet that will be added at the bottom of body.
@@ -938,8 +971,8 @@ Nikola has a built-in theme download/install mechanism to install those themes �
     $ nikola install_theme -l
     Themes:
     -------
-    base-jinja
     blogtxt
+    bootstrap3-gradients
     ⋮
     ⋮
 
@@ -992,8 +1025,36 @@ Here is an example, from my own site's deployment script::
 
 Other interesting ideas are using
 `git as a deployment mechanism <http://toroid.org/ams/git-website-howto>`_ (or any other VCS
-for that matter), using `lftp mirror <http://lftp.yar.ru/>`_ or unison, or Dropbox, or
-Ubuntu One. Any way you can think of to copy files from one place to another is good enough.
+for that matter), using `lftp mirror <http://lftp.yar.ru/>`_ or unison, or Dropbox.
+Any way you can think of to copy files from one place to another is good enough.
+
+Deploying to GitHub
+~~~~~~~~~~~~~~~~~~~
+
+Nikola provides a separate command ``github_deploy`` to deploy your
+site to GitHub pages.  The command builds the site, commits the
+output to a gh-pages branch and pushes the output to GitHub.
+
+The branch to use for committing the sources can be changed using the
+``GITHUB_DEPLOY_BRANCH`` option in your config.  For a
+user.github.io/organization.github.io, this MUST be set to ``master``,
+and the branch containing the sources must be changed to something
+else, like ``deploy``, using the ``GITHUB_SOURCE_BRANCH`` option.  The
+remote name to which the changes are pushed is ``origin`` by default,
+and can be changed using the ``GITHUB_REMOTE_NAME`` option.  You also,
+obviously, need to have ``git`` on your PATH, and should be able to
+push to the repository specified as the remote.
+
+This command performs the following actions, when it is run:
+
+1. Ensure that your site is a git repository, and git is on the PATH.
+2. Check for changes, and prompt the user to continue, if required.
+3. Build the site
+4. Clean any files that are "unknown" to Nikola.
+5. Create a deploy branch, if one doesn't exist.
+6. Commit the output to this branch.  (NOTE: Any untracked source
+   files, may get committed at this stage, on the wrong branch!)
+7. Push and deploy!
 
 Comments and Annotations
 ------------------------
@@ -1173,17 +1234,20 @@ The currently available filters are:
         ".html": [apply_to_file(string.upper)]
       }
 
+minify_lines
+   Strips leading whitespace and blank lines. Useful for compacting HTML but pre-formatted text must be escaped manually.
+
 yui_compressor
-   Compress files using `YUI compressor <http://yui.github.io/yuicompressor/>`_
+   Compress CSS/JavaScript using `YUI compressor <http://yui.github.io/yuicompressor/>`_
+
+closure_compiler
+   Compile, compress, and optimize JavaScript `Google Closure Compiler <https://developers.google.com/closure/compiler/>`_
 
 optipng
    Compress PNG files using `optipng <http://optipng.sourceforge.net/>`_
 
 jpegoptim
    Compress JPEG files using `jpegoptim <http://www.kokkonen.net/tjko/projects.html>`_
-
-tidy
-   Apply `tidy <http://tidy.sourceforge.net/>`_ to HTML files
 
 typogrify
    Improve typography using `typogrify <https://github.com/mintchaos/typogrify>`_
@@ -1207,7 +1271,7 @@ different ones, or about other web servers, please share!
 
       AddType text/css .css
 
-#. Optionally you can greate static compressed copies and save some CPU on your server
+#. Optionally you can create static compressed copies and save some CPU on your server
    with the GZIP_FILES option in Nikola.
 
 #. The webassets Nikola plugin can drastically decrease the number of CSS and JS files your site fetches.
@@ -1223,6 +1287,36 @@ reStructuredText Extensions
 
 Nikola includes support for a few directives and roles that are not part of docutils, but which
 we think are handy for website development.
+
+MathJax
+~~~~~~~
+
+Nikola supports math input via MathJax.  It uses the usual math roles and
+directives of reStructuredText.
+
+In order to use them in your posts, you **must** add the special ``mathjax`` tag.
+
+Inline mathematics (equivalent to single dollar signs or backslash-parentheses
+in LaTeX) are produced using the `math` **role**:
+
+Euler’s formula: :math:`e^{ix} = \cos x + i\sin x`
+
+::
+
+    Euler’s formula: :math:`e^{ix} = \cos x + i\sin x`
+
+Display mathematics (equivalent to double dollar signs or backslash-brackets in
+LaTeX) are produced using the `math` **directive**:
+
+.. math::
+
+   \int \frac{dx}{1+ax}=\frac{1}{a}\ln(1+ax)+C
+
+::
+
+   .. math::
+
+      \int \frac{dx}{1+ax}=\frac{1}{a}\ln(1+ax)+C
 
 Media
 ~~~~~
@@ -1305,20 +1399,18 @@ To use this, you have to put your source code files inside ``listings`` or whate
 Will include the source code from ``foo.py``, highlight its syntax in python mode,
 and also create a ``listings/foo.py.html`` page and the listing will have a title linking to it.
 
-Listings support a few extra options so that you can display a fragment instead of the whole
-file in a document:
+Listings support the same options `reST includes`__ support (including
+various options for controlling which parts of the file are included), and also
+a ``linenos`` option for Sphinx compatibility.
 
-start-at
-    Takes a string, and starts displaying the code at the first line that matches it.
-start-before
-    Takes a string, and starts displaying the code right before the first line that matches it.
-end-at
-    Takes a string, and stops displaying the code at the first line that matches it.
-end-before
-    Takes a string, and stops displaying the code right before the first line that matches it.
+__ http://docutils.sourceforge.net/docs/ref/rst/directives.html#including-an-external-document-fragment
 
-If you set start-at and start-before, start-at wins. If you set end-at and end-before, end-at wins.
-If you make it so your listing ends before it starts, it's frowned upon and nothing will be shown.
+.. note::
+
+   Formerly, ``start-at`` and ``end-at`` options were supported; however,
+   they do not work anymore (since v6.1.0) and you should now use ``start-after``
+   and ``end-before``, respectively.  You can also use ``start-line`` and
+   ``end-line``.
 
 Gist
 ~~~~
@@ -1393,6 +1485,36 @@ If we want to use the post's title as the link's text, just do::
 and it will produce:
 
     Take a look at :doc:`creating-a-theme` to know how to do it.
+
+Post List
+~~~~~~~~~
+
+This directive can be used to generate a list of posts. You could use it, for
+example, to make a list of the latest 5 blog posts, or a list of all blog posts
+with the tag ``nikola``::
+
+   Here are my 5 latest and greatest blog posts:
+
+   .. post-list::
+      :start: -5
+
+   These are all my posts about Nikola:
+
+   .. post-list::
+      :tags: nikola
+
+Note that you can give the ``tags`` option a comma-separated list of tags, in
+which case the list will show all posts that have at least one of those tags.
+Other interesting options include ``stop`` (set it to ``-1``, for example, to
+show all but the last post); ``reverse`` (set to ``True`` to sort the list in
+chronological order, instead of the default latest-post-first); ``lang``
+(language to use for post titles and links); and ``slugs`` (allows you to filter
+by post slugs, instead of tags).
+
+The post list directive uses the ``post_list_directive.tmpl`` template file (or
+another one, if you use the ``template`` option) to generate the list's HTML. By
+default, this is an unordered list with dates and clickable post titles. See
+the template file in Nikola's base theme for an example of how this works.
 
 
 Importing Your WordPress Site Into Nikola

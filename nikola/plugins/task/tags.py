@@ -25,7 +25,6 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from __future__ import unicode_literals
-import codecs
 import json
 import os
 try:
@@ -61,9 +60,9 @@ class RenderTags(Task):
             "output_folder": self.site.config['OUTPUT_FOLDER'],
             "filters": self.site.config['FILTERS'],
             "tag_pages_are_indexes": self.site.config['TAG_PAGES_ARE_INDEXES'],
-            "index_display_post_count":
-            self.site.config['INDEX_DISPLAY_POST_COUNT'],
+            "index_display_post_count": self.site.config['INDEX_DISPLAY_POST_COUNT'],
             "index_teasers": self.site.config['INDEX_TEASERS'],
+            "generate_rss": self.site.config['GENERATE_RSS'],
             "rss_teasers": self.site.config["RSS_TEASERS"],
             "rss_plain": self.site.config["RSS_PLAIN"],
             "show_untranslated_posts": self.site.config['SHOW_UNTRANSLATED_POSTS'],
@@ -90,7 +89,8 @@ class RenderTags(Task):
                     filtered_posts = post_list
                 else:
                     filtered_posts = [x for x in post_list if x.is_translation_available(lang)]
-                yield self.tag_rss(tag, lang, filtered_posts, kw, is_category)
+                if kw["generate_rss"]:
+                    yield self.tag_rss(tag, lang, filtered_posts, kw, is_category)
                 # Render HTML
                 if kw['tag_pages_are_indexes']:
                     yield self.tag_page_as_index(tag, lang, filtered_posts, kw, is_category)
@@ -123,8 +123,8 @@ class RenderTags(Task):
 
         def write_tag_data(data):
             utils.makedirs(os.path.dirname(output_name))
-            with codecs.open(output_name, 'wb+', 'utf8') as fd:
-                fd.write(json.dumps(data))
+            with open(output_name, 'w+') as fd:
+                json.dump(data, fd)
 
         task = {
             'basename': str(self.name),
@@ -168,7 +168,7 @@ class RenderTags(Task):
             else:
                 context["cat_items"] = None
             context["permalink"] = self.site.link("tag_index", None, lang)
-            context["description"] = None
+            context["description"] = context["title"]
             task = self.site.generic_post_list_renderer(
                 lang,
                 [],
@@ -205,12 +205,13 @@ class RenderTags(Task):
         num_pages = len(lists)
         for i, post_list in enumerate(lists):
             context = {}
-            # On a tag page, the feeds include the tag's feeds
-            rss_link = ("""<link rel="alternate" type="application/rss+xml" """
-                        """type="application/rss+xml" title="RSS for tag """
-                        """{0} ({1})" href="{2}">""".format(
-                            tag, lang, self.site.link(kind + "_rss", tag, lang)))
-            context['rss_link'] = rss_link
+            if kw["generate_rss"]:
+                # On a tag page, the feeds include the tag's feeds
+                rss_link = ("""<link rel="alternate" type="application/rss+xml" """
+                            """type="application/rss+xml" title="RSS for tag """
+                            """{0} ({1})" href="{2}">""".format(
+                                tag, lang, self.site.link(kind + "_rss", tag, lang)))
+                context['rss_link'] = rss_link
             output_name = os.path.join(kw['output_folder'],
                                        page_name(tag, i, lang))
             context["title"] = kw["messages"][lang][
@@ -229,7 +230,7 @@ class RenderTags(Task):
                     page_name(tag, i + 1, lang))
             context["permalink"] = self.site.link(kind, tag, lang)
             context["tag"] = tag
-            context["description"] = None
+            context["description"] = context["title"]
             task = self.site.generic_post_list_renderer(
                 lang,
                 post_list,
@@ -257,7 +258,7 @@ class RenderTags(Task):
         context["permalink"] = self.site.link(kind, tag, lang)
         context["tag"] = tag
         context["kind"] = kind
-        context["description"] = None
+        context["description"] = context["title"]
         task = self.site.generic_post_list_renderer(
             lang,
             post_list,

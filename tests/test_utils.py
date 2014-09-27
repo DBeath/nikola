@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals
 
-# This code is so you can run the samples without installing the package,
-# and should be before any import touching nikola, in any file under tests/
 import os
 import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
 import unittest
@@ -36,7 +33,7 @@ class GetMetaTest(unittest.TestCase):
         post.source_path = 'file_with_metadata'
         post.metadata_path = 'file_with_metadata.meta'
 
-        with mock.patch('nikola.post.codecs.open', opener_mock, create=True):
+        with mock.patch('nikola.post.io.open', opener_mock, create=True):
             meta = get_meta(post)
 
         self.assertEqual('Nikola needs more tests!', meta['title'])
@@ -62,7 +59,7 @@ class GetMetaTest(unittest.TestCase):
         post.source_path = 'file_with_metadata'
         post.metadata_path = 'file_with_metadata.meta'
 
-        with mock.patch('nikola.post.codecs.open', opener_mock, create=True):
+        with mock.patch('nikola.post.io.open', opener_mock, create=True):
             meta = get_meta(post)
 
         self.assertEqual('Post Title', meta['title'])
@@ -86,7 +83,7 @@ class GetMetaTest(unittest.TestCase):
         post.source_path = 'file_with_metadata'
         post.metadata_path = 'file_with_metadata.meta'
 
-        with mock.patch('nikola.post.codecs.open', opener_mock, create=True):
+        with mock.patch('nikola.post.io.open', opener_mock, create=True):
             meta = get_meta(post, 'file_with_metadata')
 
         self.assertEqual('file_with_metadata', meta['title'])
@@ -111,7 +108,7 @@ class GetMetaTest(unittest.TestCase):
         post.source_path = 'Slugify this'
         post.metadata_path = 'Slugify this.meta'
 
-        with mock.patch('nikola.post.codecs.open', opener_mock, create=True):
+        with mock.patch('nikola.post.io.open', opener_mock, create=True):
             meta = get_meta(post, 'Slugify this')
 
         self.assertEqual('Nikola needs more tests!', meta['title'])
@@ -125,7 +122,7 @@ class GetMetaTest(unittest.TestCase):
         post = dummy()
         post.source_path = '2013-01-23-the_slug-dubdubtitle.md'
         post.metadata_path = '2013-01-23-the_slug-dubdubtitle.meta'
-        with mock.patch('nikola.post.codecs.open', create=True):
+        with mock.patch('nikola.post.io.open', create=True):
             meta = get_meta(
                 post,
                 '(?P<date>\d{4}-\d{2}-\d{2})-(?P<slug>.*)-(?P<title>.*)\.md')
@@ -138,7 +135,7 @@ class GetMetaTest(unittest.TestCase):
         post = dummy()
         post.source_path = 'some/path/the_slug.md'
         post.metadata_path = 'some/path/the_slug.meta'
-        with mock.patch('nikola.post.codecs.open', create=True):
+        with mock.patch('nikola.post.io.open', create=True):
             meta = get_meta(post)
 
         self.assertEqual('the_slug', meta['slug'])

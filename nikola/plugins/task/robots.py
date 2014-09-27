@@ -25,7 +25,7 @@
 # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 from __future__ import print_function, absolute_import, unicode_literals
-import codecs
+import io
 import os
 try:
     from urlparse import urljoin, urlparse
@@ -51,14 +51,14 @@ class RobotsFile(LateTask):
             "robots_exclusions": self.site.config["ROBOTS_EXCLUSIONS"]
         }
 
-        if kw["site_url"] != urljoin(kw["site_url"], "/"):
-            utils.LOGGER.warn('robots.txt not ending up in server root, will be useless')
-
         sitemapindex_url = urljoin(kw["base_url"], "sitemapindex.xml")
         robots_path = os.path.join(kw['output_folder'], "robots.txt")
 
         def write_robots():
-            with codecs.open(robots_path, 'wb+', 'utf8') as outf:
+            if kw["site_url"] != urljoin(kw["site_url"], "/"):
+                utils.LOGGER.warn('robots.txt not ending up in server root, will be useless')
+
+            with io.open(robots_path, 'w+', encoding='utf8') as outf:
                 outf.write("Sitemap: {0}\n\n".format(sitemapindex_url))
                 if kw["robots_exclusions"]:
                     outf.write("User-Agent: *\n")
