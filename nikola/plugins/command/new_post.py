@@ -51,7 +51,9 @@ def filter_post_pages(compiler, is_post, compilers, post_pages):
     filtered = [entry for entry in post_pages if entry[3] == is_post]
 
     # These are the extensions supported by the required format
-    extensions = compilers[compiler]
+    extensions = compilers.get(compiler)
+    if extensions is None:
+        raise Exception('Unknown format {0}'.format(compiler))
 
     # Throw away the post_pages with the wrong extensions
     filtered = [entry for entry in filtered if any([ext in entry[0] for ext in
@@ -318,6 +320,7 @@ class CommandNewPost(Command):
         d_name = os.path.dirname(txt_path)
         utils.makedirs(d_name)
         metadata = self.site.config['ADDITIONAL_METADATA']
+        data.update(metadata)
 
         # Override onefile if not really supported.
         if not compiler_plugin.supports_onefile and onefile:

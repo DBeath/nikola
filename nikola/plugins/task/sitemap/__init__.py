@@ -36,7 +36,7 @@ except ImportError:
     import urllib.robotparser as robotparser  # NOQA
 
 from nikola.plugin_categories import LateTask
-from nikola.utils import config_changed
+from nikola.utils import config_changed, apply_filters
 
 
 urlset_header = """<?xml version="1.0" encoding="UTF-8"?>
@@ -112,7 +112,8 @@ class Sitemap(LateTask):
             "index_file": self.site.config["INDEX_FILE"],
             "sitemap_include_fileless_dirs": self.site.config["SITEMAP_INCLUDE_FILELESS_DIRS"],
             "mapped_extensions": self.site.config.get('MAPPED_EXTENSIONS', ['.html', '.htm', '.xml', '.rss']),
-            "robots_exclusions": self.site.config["ROBOTS_EXCLUSIONS"]
+            "robots_exclusions": self.site.config["ROBOTS_EXCLUSIONS"],
+            "filters": self.site.config["FILTERS"],
         }
 
         output = kw['output_folder']
@@ -215,17 +216,17 @@ class Sitemap(LateTask):
             file_dep = []
 
             for i in urlset.keys():
-                p = os.path.join(output, urlparse(i).path.lstrip('/'))
-                if not p.endswith('sitemap.xml') and not p.endswith('/'):
+                p = os.path.join(output, urlparse(i).path.replace(base_path, '', 1))
+                if not p.endswith('sitemap.xml') and not os.path.isdir(p):
                     file_dep.append(p)
-                if p.endswith('/') and os.path.exists(p + 'index.html'):
+                if os.path.isdir(p) and os.path.exists(os.path.join(p, 'index.html')):
                     file_dep.append(p + 'index.html')
 
             for i in sitemapindex.keys():
-                p = os.path.join(output, urlparse(i).path.lstrip('/'))
-                if not p.endswith('sitemap.xml') and not p.endswith('/'):
+                p = os.path.join(output, urlparse(i).path.replace(base_path, '', 1))
+                if not p.endswith('sitemap.xml') and not os.path.isdir(p):
                     file_dep.append(p)
-                if p.endswith('/') and os.path.exists(p + 'index.html'):
+                if os.path.isdir(p) and os.path.exists(os.path.join(p, 'index.html')):
                     file_dep.append(p + 'index.html')
 
             return {'file_dep': file_dep}
@@ -237,7 +238,7 @@ class Sitemap(LateTask):
         }
 
         yield self.group_task()
-        yield {
+        yield apply_filters({
             "basename": "sitemap",
             "name": sitemap_path,
             "targets": [sitemap_path],
@@ -246,8 +247,8 @@ class Sitemap(LateTask):
             "clean": True,
             "task_dep": ["render_site"],
             "calc_dep": ["_scan_locs:sitemap"],
-        }
-        yield {
+        }, kw['filters'])
+        yield apply_filters({
             "basename": "sitemap",
             "name": sitemapindex_path,
             "targets": [sitemapindex_path],
@@ -255,11 +256,11 @@ class Sitemap(LateTask):
             "uptodate": [config_changed(kw)],
             "clean": True,
             "file_dep": [sitemap_path]
-        }
+        }, kw['filters'])
 
     def get_lastmod(self, p):
         if self.site.invariant:
-            return '2014-01-01'
+            return '2038-01-01'
         else:
             return datetime.datetime.fromtimestamp(os.stat(p).st_mtime).isoformat().split('T')[0]
 

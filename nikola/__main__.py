@@ -100,7 +100,7 @@ def main(args=None):
     if len(args) > 0 and args[0] == b'build' and b'--invariant' in args:
         try:
             import freezegun
-            freeze = freezegun.freeze_time("2014-01-01")
+            freeze = freezegun.freeze_time("2038-01-01")
             freeze.start()
             invariant = True
         except ImportError:
@@ -270,12 +270,12 @@ class DoitNikola(DoitMain):
             args = ['version']
         if args[0] not in sub_cmds.keys():
             LOGGER.error("Unknown command {0}".format(args[0]))
-            return False
+            return 3
         if not isinstance(sub_cmds[args[0]], (Command, Help)):  # Is a doit command
             if not self.nikola.configured:
                 LOGGER.error("This command needs to run inside an "
                              "existing Nikola site.")
-                return False
+                return 3
 
         return super(DoitNikola, self).run(cmd_args)
 
